@@ -1,0 +1,5 @@
+# Coloca aquí una URL por línea (ejemplo: https://www.google.com)
+https://www.ucv.edu.pe/nosotros
+https://www.ucv.edu.pe/noticias
+https://www.ucv.edu.pe/pregrado-presencial/ingenieria-de-sistemas
+

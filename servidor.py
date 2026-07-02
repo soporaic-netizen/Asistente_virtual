@@ -47,8 +47,8 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 SOLUCIÓN DEFINITIVA (Opción 1): Petición web directa HTTP a la API de Google
-# Esto evita las restricciones o fallos de traducción de modelos del nuevo SDK.
+# 🔥 SOLUCIÓN: Petición web directa HTTP a la API de Google v1 de producción
+# Usamos el modelo 'embedding-001' que cuenta con soporte global absoluto.
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
@@ -56,13 +56,13 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
             if not api_key:
                 raise ValueError("No se encontró la GEMINI_API_KEY en las variables de entorno.")
             
-            # Llamada directa al endpoint oficial y estable de Google v1beta
-            url = f"https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents?key={api_key}"
+            # Ruta de producción estable v1 con modelo estándar global
+            url = f"https://generativelanguage.googleapis.com/v1/models/embedding-001:batchEmbedContents?key={api_key}"
             
-            # Estructuramos la petición exactamente como la requiere Google para lotes (batch)
+            # Estructuramos la petición en lotes
             payload = {
                 "requests": [
-                    {"model": "models/text-embedding-004", "content": {"parts": [{"text": texto}]}}
+                    {"model": "models/embedding-001", "content": {"parts": [{"text": texto}]}}
                     for texto in input
                 ]
             }
@@ -235,7 +235,15 @@ async def startup_event():
     print("🚀 Servidor en línea. Iniciando verificación de archivos en segundo plano de forma segura...")
     asyncio.create_task(asyncio.to_thread(cargar_y_vectorizar_fuentes))
 
-# 3. ENDPOINT DE CONSULTA
+
+# 3. ENDPOINTS DEL SERVIDOR
+
+@app.get("/")
+def ruta_raiz():
+    # 🔥 SOLUCIÓN AL APAGADO AUTOMÁTICO: Respondemos 200 OK a las pruebas de vida (Health Checks) de Render
+    return {"status": "online", "mensaje": "Cerebro del Asistente Universitario Activo"}
+
+
 class Consulta(BaseModel):
     pregunta: str
 

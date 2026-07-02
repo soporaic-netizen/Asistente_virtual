@@ -187,12 +187,26 @@ def cargar_y_vectorizar_fuentes():
         nombre_limpio = "".join(c for c in nombre_fuente if c.isalnum() or c in "._-")
         ids.append(f"id_{nombre_limpio}_chunk_{i}")
     
-    coleccion.add(
-        documents=textos,
-        metadatas=metadatos,
-        ids=ids
-    )
-    print(f"✅ ¡Éxito! Se añadieron/actualizaron {len(fragmentos)} fragmentos. Total acumulado en DB: {coleccion.count()}.")
+    # 🔥 NUEVO CÓDIGO INYECTADO: Subida por lotes (Batching) para evitar el error 400 de Google
+    TAMANO_LOTE = 90
+    total_fragmentos = len(fragmentos)
+    print(f"📦 Dividiendo {total_fragmentos} fragmentos en lotes de {TAMANO_LOTE} para la API de Google...")
+
+    for inicio in range(0, total_fragmentos, TAMANO_LOTE):
+        fin = min(inicio + TAMANO_LOTE, total_fragmentos)
+        
+        lote_textos = textos[inicio:fin]
+        lote_metadatos = metadatos[inicio:fin]
+        lote_ids = ids[inicio:fin]
+        
+        print(f"🚀 Enviando lote: fragmentos del {inicio} al {fin}...")
+        coleccion.add(
+            documents=lote_textos,
+            metadatas=lote_metadatos,
+            ids=lote_ids
+        )
+        
+    print(f"✅ ¡Éxito! Se añadieron/actualizaron todos los {total_fragmentos} fragmentos. Total acumulado en DB: {coleccion.count()}.")
 
 @app.on_event("startup")
 def startup_event():

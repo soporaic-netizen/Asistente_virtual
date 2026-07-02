@@ -52,7 +52,7 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
         try:
             # Llamamos al cliente oficial de Google para procesar los vectores en su nube gratis
             response = cliente_gemini.models.embed_content(
-                model="text-embedding-004",
+                model="models/text-embedding-004",
                 contents=input
             )
             # Retornamos la lista de embeddings matemáticos

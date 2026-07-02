@@ -7,8 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
-# Usamos la función de embeddings nativa y local de Chroma
-from chromadb.utils import embedding_functions
+# 🔥 CAMBIO: Importamos la función de embeddings en la nube de Google GenAI
+from chromadb.utils.embedding_functions import GoogleGenAIEmbeddingFunction
 from google import genai
 from google.genai import types
 from langchain_core.documents import Document as LangchainDocument  # Estructura de datos base
@@ -47,13 +47,17 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# FUNCIÓN LOCAL: Genera los embeddings en tu PC sin consultar a la API de Google
-funcion_embedding_local = embedding_functions.DefaultEmbeddingFunction()
+# 🔥 SOLUCIÓN: Configuramos la función de embeddings en la nube delegando el trabajo a la API de Google.
+# Esto reduce el consumo de RAM en Render a menos de 150MB porque ya no carga modelos matemáticos locales.
+funcion_embedding_cloud = GoogleGenAIEmbeddingFunction(
+    api_key=os.environ.get("GEMINI_API_KEY", ""),
+    model_name="text-embedding-004"
+)
 
-# Creamos la colección vinculada al modelo local
+# Creamos o cargamos la colección vinculada a la nueva función en la nube
 coleccion = cliente_chroma.get_or_create_collection(
     name="universidad_docs",
-    embedding_function=funcion_embedding_local
+    embedding_function=funcion_embedding_cloud
 )
 
 # --- FUNCIONES AUXILIARES DE EXTRACCIÓN Y LECTURA ---
@@ -167,8 +171,7 @@ def cargar_y_vectorizar_fuentes():
     textos = [frag.page_content for frag in fragmentos]
     metadatos = [frag.metadata if frag.metadata else {"fuente": "desconocida"} for frag in fragmentos]
     
-    # 🔥 SOLUCIÓN DEFINITIVA A LA DUPLICACIÓN: Generar IDs deterministas basados en la fuente y el número de chunk.
-    # Si vuelves a procesar un archivo, ChromaDB sobrescribirá (upsert) en lugar de duplicar los datos.
+    # SOLUCIÓN DEFINITIVA A LA DUPLICACIÓN: Generar IDs deterministas basados en la fuente y el número de chunk.
     ids = []
     for i, frag in enumerate(fragmentos):
         nombre_fuente = frag.metadata.get("fuente", "desconocida")

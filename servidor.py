@@ -47,8 +47,8 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 SOLUCIÓN: Petición web directa HTTP a la API de Google v1 de producción
-# Usamos el modelo 'embedding-001' que cuenta con soporte global absoluto.
+# 🔥 SOLUCIÓN DEFINITIVA: Usamos el endpoint global de modelos por lotes en v1beta
+# Especificamos correctamente el modelo 'text-embedding-004' dentro de cada request.
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
@@ -56,13 +56,16 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
             if not api_key:
                 raise ValueError("No se encontró la GEMINI_API_KEY en las variables de entorno.")
             
-            # Ruta de producción estable v1 con modelo estándar global
-            url = f"https://generativelanguage.googleapis.com/v1/models/embedding-001:batchEmbedContents?key={api_key}"
+            # URL global para solicitudes por lotes (Batch)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models:batchEmbedContents?key={api_key}"
             
-            # Estructuramos la petición en lotes
+            # Estructuramos el payload especificando el modelo de forma explícita
             payload = {
                 "requests": [
-                    {"model": "models/embedding-001", "content": {"parts": [{"text": texto}]}}
+                    {
+                        "model": "models/text-embedding-004", 
+                        "content": {"parts": [{"text": texto}]}
+                    }
                     for texto in input
                 ]
             }
@@ -240,7 +243,7 @@ async def startup_event():
 
 @app.get("/")
 def ruta_raiz():
-    # 🔥 SOLUCIÓN AL APAGADO AUTOMÁTICO: Respondemos 200 OK a las pruebas de vida (Health Checks) de Render
+    # Respondemos 200 OK a las pruebas de vida (Health Checks) de Render
     return {"status": "online", "mensaje": "Cerebro del Asistente Universitario Activo"}
 
 

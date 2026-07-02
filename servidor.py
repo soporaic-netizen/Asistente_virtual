@@ -55,7 +55,7 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
                 raise ValueError("No se encontró la GEMINI_API_KEY en las variables de entorno.")
             
             # Llamada directa al endpoint oficial y estable de Google v1beta
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
+            url = f"https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents?key={api_key}"
             
             # Estructuramos la petición exactamente como la requiere Google para lotes (batch)
             payload = {

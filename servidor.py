@@ -26,9 +26,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configura tu API Key aquí
-#API_KEY = ""
-#os.environ["GEMINI_API_KEY"] = API_KEY
+# El servidor buscará automáticamente la variable 'GEMINI_API_KEY' en el entorno.
+if "GEMINI_API_KEY" not in os.environ:
+    # Solo si estás en tu PC local y necesitas probarlo rápido sin variables de entorno:
+    os.environ["GEMINI_API_KEY"] = "TU_API_KEY_AQUÍ_SOLO_LOCAL"
 
 # Inicializamos el cliente oficial de Google para la respuesta final
 cliente_gemini = genai.Client()

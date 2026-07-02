@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from docx import Document as DocxDocument  # Evita colisión de nombres
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import BackgroundTasks
 from pydantic import BaseModel
 import chromadb
 # Usamos el protocolo base de Chroma para registrar funciones de embedding personalizadas
@@ -14,6 +15,7 @@ from google.genai import types
 from langchain_core.documents import Document as LangchainDocument  # Estructura de datos base
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 
 # 1. CONFIGURACIÓN DEL SERVIDOR
 app = FastAPI(title="Cerebro Local/Híbrido del Asistente Universitario")
@@ -229,10 +231,9 @@ import asyncio
 
 @app.on_event("startup")
 async def startup_event():
-    # Ejecutamos la carga pesada en un hilo de fondo de manera asíncrona.
-    # Esto permite abrir el puerto de FastAPI de inmediato evitando el Port scan timeout.
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, cargar_y_vectorizar_fuentes)
+    # Usamos un mecanismo nativo que no interfiere con el hilo de Uvicorn
+    print("🚀 Servidor en línea. Iniciando verificación de archivos en segundo plano de forma segura...")
+    asyncio.create_task(asyncio.to_thread(cargar_y_vectorizar_fuentes))
 
 # 3. ENDPOINT DE CONSULTA
 class Consulta(BaseModel):

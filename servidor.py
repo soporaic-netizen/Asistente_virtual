@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
 # 🔥 CAMBIO: Importamos la función de embeddings en la nube de Google GenAI
-from chromadb.utils.embedding_functions import GoogleGenerativeAIEmbeddingFunction
+from langchain_google_genai import GoogleGenAIEmbeddings
 from google import genai
 from google.genai import types
 from langchain_core.documents import Document as LangchainDocument  # Estructura de datos base
@@ -49,9 +49,9 @@ cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
 # 🔥 SOLUCIÓN: Configuramos la función de embeddings en la nube delegando el trabajo a la API de Google.
 # Esto reduce el consumo de RAM en Render a menos de 150MB porque ya no carga modelos matemáticos locales.
-funcion_embedding_cloud = GoogleGenerativeAIEmbeddingFunction(
-    api_key=os.environ.get("GEMINI_API_KEY", ""),
-    model_name="text-embedding-004"
+funcion_embedding_cloud = GoogleGenAIEmbeddings(
+    model="models/text-embedding-004",
+    google_api_key=os.environ.get("GEMINI_API_KEY", "")
 )
 
 # Creamos o cargamos la colección vinculada a la nueva función en la nube

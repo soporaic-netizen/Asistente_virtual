@@ -9,5 +9,6 @@ google-genai
 google-generativeai
 langchain-core
 langchain-community
+langchain-google-genai
 pypdf
 langchain-text-splitters

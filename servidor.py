@@ -7,8 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
-# 🔥 CAMBIO: Importamos la función de embeddings en la nube de Google GenAI
-from langchain_google_genai import GoogleGenAIEmbeddings
+# Usamos el protocolo base de Chroma para registrar funciones de embedding personalizadas
+from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 from google import genai
 from google.genai import types
 from langchain_core.documents import Document as LangchainDocument  # Estructura de datos base
@@ -28,17 +28,15 @@ app.add_middleware(
 
 # El servidor buscará automáticamente la variable 'GEMINI_API_KEY' en el entorno.
 if "GEMINI_API_KEY" not in os.environ:
-    # Solo si estás en tu PC local y necesitas probarlo rápido sin variables de entorno:
     os.environ["GEMINI_API_KEY"] = "TU_API_KEY_AQUÍ_SOLO_LOCAL"
 
-# Inicializamos el cliente oficial de Google para la respuesta final
+# Inicializamos el cliente oficial de Google GenAI
 cliente_gemini = genai.Client()
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
 CARPETA_DB_VECTORIAL = "./db_vectorial"
 ARCHIVO_URLS = "./urls_web.txt"
 
-# --- DICCIONARIO GLOBAL PARA LA CACHÉ DE RESPUESTAS ---
 CACHE_RESPUESTAS = {}
 
 if not os.path.exists(CARPETA_DOCUMENTOS):
@@ -47,14 +45,26 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 SOLUCIÓN: Configuramos la función de embeddings en la nube delegando el trabajo a la API de Google.
-# Esto reduce el consumo de RAM en Render a menos de 150MB porque ya no carga modelos matemáticos locales.
-funcion_embedding_cloud = GoogleGenAIEmbeddings(
-    model="models/text-embedding-004",
-    google_api_key=os.environ.get("GEMINI_API_KEY", "")
-)
+# 🔥 CLASE DE ADAPTACIÓN DIRECTA: Creamos una función de embedding compatible nativamente con Chroma 
+# que consume la API de Gemini sin cargar librerías extras pesadas como langchain-google-genai.
+class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
+    def __call__(self, input: Documents) -> Embeddings:
+        try:
+            # Llamamos al cliente oficial de Google para procesar los vectores en su nube gratis
+            response = cliente_gemini.models.embed_content(
+                model="text-embedding-004",
+                contents=input
+            )
+            # Retornamos la lista de embeddings matemáticos
+            return [e.values for e in response.embeddings]
+        except Exception as e:
+            print(f"❌ Error al generar embeddings en la API de Google: {e}")
+            raise e
 
-# Creamos o cargamos la colección vinculada a la nueva función en la nube
+# Instanciamos nuestra función cloud optimizada
+funcion_embedding_cloud = GeminiEmbeddingFunctionCloud()
+
+# Creamos o cargamos la colección vinculada a la nueva función integrada
 coleccion = cliente_chroma.get_or_create_collection(
     name="universidad_docs",
     embedding_function=funcion_embedding_cloud
@@ -171,7 +181,6 @@ def cargar_y_vectorizar_fuentes():
     textos = [frag.page_content for frag in fragmentos]
     metadatos = [frag.metadata if frag.metadata else {"fuente": "desconocida"} for frag in fragmentos]
     
-    # SOLUCIÓN DEFINITIVA A LA DUPLICACIÓN: Generar IDs deterministas basados en la fuente y el número de chunk.
     ids = []
     for i, frag in enumerate(fragmentos):
         nombre_fuente = frag.metadata.get("fuente", "desconocida")

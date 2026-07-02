@@ -30,7 +30,7 @@ app.add_middleware(
 if "GEMINI_API_KEY" not in os.environ:
     os.environ["GEMINI_API_KEY"] = "TU_API_KEY_AQUÍ_SOLO_LOCAL"
 
-# Inicializamos el cliente oficial de Google GenAI
+# Inicializamos el cliente oficial de Google GenAI (se mantiene para la respuesta final)
 cliente_gemini = genai.Client()
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
@@ -45,23 +45,40 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 CLASE DE ADAPTACIÓN DIRECTA: Creamos una función de embedding compatible nativamente con Chroma 
-# que consume la API de Gemini sin cargar librerías extras pesadas como langchain-google-genai.
+# 🔥 SOLUCIÓN DEFINITIVA (Opción 1): Petición web directa HTTP a la API de Google
+# Esto evita las restricciones o fallos de traducción de modelos del nuevo SDK.
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
-            # Llamamos al cliente oficial de Google para procesar los vectores en su nube gratis
-            response = cliente_gemini.models.embed_content(
-                model="text-embedding-004",
-                contents=input
-            )
-            # Retornamos la lista de embeddings matemáticos
-            return [e.values for e in response.embeddings]
+            api_key = os.environ.get("GEMINI_API_KEY", "")
+            if not api_key:
+                raise ValueError("No se encontró la GEMINI_API_KEY en las variables de entorno.")
+            
+            # Llamada directa al endpoint oficial y estable de Google v1beta
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
+            
+            # Estructuramos la petición exactamente como la requiere Google para lotes (batch)
+            payload = {
+                "requests": [
+                    {"model": "models/text-embedding-004", "content": {"parts": [{"text": texto}]}}
+                    for texto in input
+                ]
+            }
+            
+            respuesta = requests.post(url, json=payload, timeout=15)
+            resultado_json = respuesta.json()
+            
+            if respuesta.status_code != 200:
+                raise Exception(f"Error API Google ({respuesta.status_code}): {resultado_json}")
+                
+            # Extraemos los vectores matemáticos devueltos por Google
+            return [e["values"] for e in resultado_json["embeddings"]]
+            
         except Exception as e:
             print(f"❌ Error al generar embeddings en la API de Google: {e}")
             raise e
 
-# Instanciamos nuestra función cloud optimizada
+# Instanciamos nuestra función cloud optimizada mediante HTTP requests
 funcion_embedding_cloud = GeminiEmbeddingFunctionCloud()
 
 # Creamos o cargamos la colección vinculada a la nueva función integrada
@@ -187,7 +204,7 @@ def cargar_y_vectorizar_fuentes():
         nombre_limpio = "".join(c for c in nombre_fuente if c.isalnum() or c in "._-")
         ids.append(f"id_{nombre_limpio}_chunk_{i}")
     
-    # 🔥 NUEVO CÓDIGO INYECTADO: Subida por lotes (Batching) para evitar el error 400 de Google
+    # Subida por lotes (Batching) para evitar el error 400 de Google
     TAMANO_LOTE = 90
     total_fragmentos = len(fragmentos)
     print(f"📦 Dividiendo {total_fragmentos} fragmentos en lotes de {TAMANO_LOTE} para la API de Google...")
@@ -208,9 +225,14 @@ def cargar_y_vectorizar_fuentes():
         
     print(f"✅ ¡Éxito! Se añadieron/actualizaron todos los {total_fragmentos} fragmentos. Total acumulado en DB: {coleccion.count()}.")
 
+import asyncio
+
 @app.on_event("startup")
-def startup_event():
-    cargar_y_vectorizar_fuentes()
+async def startup_event():
+    # Ejecutamos la carga pesada en un hilo de fondo de manera asíncrona.
+    # Esto permite abrir el puerto de FastAPI de inmediato evitando el Port scan timeout.
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, cargar_y_vectorizar_fuentes)
 
 # 3. ENDPOINT DE CONSULTA
 class Consulta(BaseModel):

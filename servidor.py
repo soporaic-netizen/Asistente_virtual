@@ -28,12 +28,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# El servidor buscará automáticamente la variable 'GEMINI_API_KEY' en el entorno.
-if "GEMINI_API_KEY" not in os.environ:
-    os.environ["GEMINI_API_KEY"] = "TU_API_KEY_AQUÍ_SOLO_LOCAL"
+API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Inicializamos el cliente oficial de Google GenAI con los valores estándar del SDK
-cliente_gemini = genai.Client()
+if not API_KEY:
+    raise RuntimeError("No existe GEMINI_API_KEY")
+
+cliente_gemini = genai.Client(api_key=API_KEY)
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
 CARPETA_DB_VECTORIAL = "./db_vectorial"
@@ -53,8 +53,8 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
         try:
             # Llamamos al modelo usando el identificador limpio compatible con el SDK v1/v1beta unificado
             respuesta = cliente_gemini.models.embed_content(
-                model="text-embedding-004",
-                contents=input
+                model="gemini-embedding-001",
+                contents=list(input)
             )
             
             # Extraemos los vectores numéricos devueltos por el cliente

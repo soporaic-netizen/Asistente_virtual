@@ -32,9 +32,8 @@ app.add_middleware(
 if "GEMINI_API_KEY" not in os.environ:
     os.environ["GEMINI_API_KEY"] = "TU_API_KEY_AQUÍ_SOLO_LOCAL"
 
-# 🔥 FIX DEFINITIVO: Forzamos al SDK a utilizar la versión estable 'v1' de la API
-# Esto permite encontrar correctamente el modelo 'text-embedding-004' sin errores de ruta.
-cliente_gemini = genai.Client(http_options={'api_version': 'v1'})
+# Inicializamos el cliente oficial de Google GenAI con los valores estándar del SDK
+cliente_gemini = genai.Client()
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
 CARPETA_DB_VECTORIAL = "./db_vectorial"
@@ -48,21 +47,21 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# Función de embedding adaptada para usar el cliente con la versión v1 correcta
+# 🔥 CLASE DE EMBEDDING REPARADA
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
-            # El SDK gestiona internamente el procesamiento por lotes de la lista de textos
+            # Llamamos al modelo usando el identificador limpio compatible con el SDK v1/v1beta unificado
             respuesta = cliente_gemini.models.embed_content(
                 model="text-embedding-004",
                 contents=input
             )
             
-            # Extraemos los vectores numéricos devueltos por el cliente estable
+            # Extraemos los vectores numéricos devueltos por el cliente
             return [e.values for e in respuesta.embeddings]
             
         except Exception as e:
-            print(f"❌ Error al generar embeddings con el SDK oficial de Google (v1): {e}")
+            print(f"❌ Error al generar embeddings con el SDK oficial de Google: {e}")
             raise e
 
 # Instanciamos nuestra función cloud optimizada mediante HTTP requests

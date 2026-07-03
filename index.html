@@ -28,29 +28,22 @@
             justify-content: center;
         }
 
-        /* SOLUCIÓN AL ESCALADO Y ELEVACIÓN: 
-           Encapsulamos el SVG en sus proporciones reales para obligar al navegador a obedecer la escala */
+        /* Encapsulamos el SVG en sus proporciones reales para obligar al navegador a obedecer la escala */
         #avatar-svg {
-            width: 60vw;  /* Reducimos el ancho al 60% (un 40% menos que antes) */
-            height: 60vh; /* Reducimos el alto al 60% (un 40% menos que antes) */
+            width: 60vw;  
+            height: 60vh; 
             display: block;
-            
-            /* Eliminamos el transform: scale que causaba el conflicto de coordenadas */
             transform: none; 
-            
-            /* ELEVACIÓN PREMIVM DEL PISO: 
-               Al reducir el contenedor, este margen ahora sí empujará al avatar limpiamente hacia arriba */
-            margin-bottom: 5vh; 
         }
         
-        /* UBICACIÓN DE CONTROLES: Abajo a la derecha, flotando */
+        /* 🔥 UBICACIÓN DE CONTROLES: Ajustado a la parte SUPERIOR derecha */
         .controles {
             position: absolute;
-            bottom: 30px;
-            right: 30px; 
+            top: 20px;
+            right: 20px; 
             display: flex;
-            gap: 15px;
-            z-index: 10; 
+            gap: 10px;
+            z-index: 8; 
             background: rgba(22, 36, 71, 0.75); 
             padding: 12px 20px;
             border-radius: 30px;
@@ -78,16 +71,17 @@
             transform: scale(0.95);
         } 
 
-        /* Estado flotando justo encima de los botones a la derecha */
+        /* 🔥 UBICACIÓN DEL ESTADO: Posicionado justo DEBAJO de los botones en la parte superior derecha */
         #status { 
             position: absolute;
-            bottom: 105px;
-            right: 45px; 
+            top: 85px;
+            right: 35px; 
             color: #00ffcc; 
             font-style: italic;
             z-index: 10;
             text-shadow: 1px 1px 4px rgba(0,0,0,0.8);
             font-size: 14px;
+            text-align: right;
         }
     </style>
 </head>
@@ -100,7 +94,7 @@
     <div id="status">Estado: Cargando a UCVsito...</div>
 
     <div class="controles">
-        <button id="btn-hablar" onclick="activarMicrofono()">📢 Hablar con UCVSITO</button>
+        <button id="btn-hablar" onclick="activarMicrofono()">📢 Pregúntame </button>
         <button onclick="detenerTodo()">Detener</button>
     </div>
 
@@ -251,7 +245,7 @@
 
         function reproducirVozYAnimar(texto) {
             if (!texto) return;
-            const textoConPausa = ".. ," + texto; //para evitar que no se escuche la primera silaba
+            const textoConPausa = ".. ," + texto; 
             const lectura = new SpeechSynthesisUtterance(textoConPausa);
             if (vozSeleccionada) {
                 lectura.voice = vozSeleccionada;
@@ -267,7 +261,6 @@
                 btnHablar.style.backgroundColor = "#00cc66";
 
                 setTimeout(() => {
-                    // Solo iniciamos la animación si el navegador todavía está reproduciendo voz
                     if (sintentizadorVoz.speaking) {
                         iniciarAnimacionBoca();
                     }
@@ -302,7 +295,7 @@
         }
 
         function restaurarBoton() {
-            btnHablar.innerText = "📢 Hablar con el Avatar";
+            btnHablar.innerText = "📢 Pregúntame";
             btnHablar.style.backgroundColor = "";
             statusText.innerText = "Estado: En reposo";
         }

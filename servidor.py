@@ -47,8 +47,7 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 SOLUCIÓN DEFINITIVA: Usamos el endpoint global de modelos por lotes en v1beta
-# Especificamos correctamente el modelo 'text-embedding-004' dentro de cada request.
+# 🔥 SOLUCIÓN ULTRAPREVENTIVA: Validamos la respuesta HTTP antes de parsear a JSON
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
@@ -56,14 +55,13 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
             if not api_key:
                 raise ValueError("No se encontró la GEMINI_API_KEY en las variables de entorno.")
             
-            # URL global para solicitudes por lotes (Batch)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models:batchEmbedContents?key={api_key}"
+            # Endpoint directo para procesamiento por lotes del modelo text-embedding-004
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
             
-            # Estructuramos el payload especificando el modelo de forma explícita
+            # El payload estructurado según los requerimientos estándar de la API de Google
             payload = {
                 "requests": [
                     {
-                        "model": "models/text-embedding-004", 
                         "content": {"parts": [{"text": texto}]}
                     }
                     for texto in input
@@ -71,12 +69,16 @@ class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
             }
             
             respuesta = requests.post(url, json=payload, timeout=15)
-            resultado_json = respuesta.json()
             
+            # 🛡️ VALIDACIÓN DE SEGURIDAD PRIMERO: Verificamos el estado antes de procesar JSON
             if respuesta.status_code != 200:
-                raise Exception(f"Error API Google ({respuesta.status_code}): {resultado_json}")
+                raise Exception(f"Error API Google (Status {respuesta.status_code}): {respuesta.text}")
                 
-            # Extraemos los vectores matemáticos devueltos por Google
+            try:
+                resultado_json = respuesta.json()
+            except Exception:
+                raise Exception(f"No se pudo decodificar el JSON de la respuesta. Contenido: {respuesta.text}")
+                
             return [e["values"] for e in resultado_json["embeddings"]]
             
         except Exception as e:
@@ -138,7 +140,7 @@ def extraer_texto_de_url(url):
             texto_limpio = re.sub(r'\s+', ' ', texto_sucio).strip()
             return texto_limpio
     except Exception as e:
-        print(f"⚠️ Error al raspar la URL {url}: {e}")
+        print(f"⚠️ Error al rasppar la URL {url}: {e}")
     return None
 
 # 2. PROCESAMIENTO MULTIFUENTE E INCREMENTAL

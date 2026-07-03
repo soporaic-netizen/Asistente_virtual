@@ -32,8 +32,9 @@ app.add_middleware(
 if "GEMINI_API_KEY" not in os.environ:
     os.environ["GEMINI_API_KEY"] = "TU_API_KEY_AQUÍ_SOLO_LOCAL"
 
-# Inicializamos el cliente oficial de Google GenAI (se mantiene para la respuesta final)
-cliente_gemini = genai.Client()
+# 🔥 FIX DEFINITIVO: Forzamos al SDK a utilizar la versión estable 'v1' de la API
+# Esto permite encontrar correctamente el modelo 'text-embedding-004' sin errores de ruta.
+cliente_gemini = genai.Client(http_options={'api_version': 'v1'})
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
 CARPETA_DB_VECTORIAL = "./db_vectorial"
@@ -47,21 +48,21 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 SOLUCIÓN NATIVA Y DEFINITIVA: Usamos el cliente oficial de Google GenAI (SDK)
+# Función de embedding adaptada para usar el cliente con la versión v1 correcta
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
-            # El SDK de Google acepta nativamente una lista de textos y gestiona el lote internamente
+            # El SDK gestiona internamente el procesamiento por lotes de la lista de textos
             respuesta = cliente_gemini.models.embed_content(
                 model="text-embedding-004",
                 contents=input
             )
             
-            # Extraemos los vectores numéricos directamente desde los objetos de respuesta del SDK
+            # Extraemos los vectores numéricos devueltos por el cliente estable
             return [e.values for e in respuesta.embeddings]
             
         except Exception as e:
-            print(f"❌ Error al generar embeddings con el SDK oficial de Google: {e}")
+            print(f"❌ Error al generar embeddings con el SDK oficial de Google (v1): {e}")
             raise e
 
 # Instanciamos nuestra función cloud optimizada mediante HTTP requests
@@ -215,7 +216,6 @@ import asyncio
 
 @app.on_event("startup")
 async def startup_event():
-    # Usamos un mecanismo nativo que no interfiere con el hilo de Uvicorn
     print("🚀 Servidor en línea. Iniciando verificación de archivos en segundo plano de forma segura...")
     asyncio.create_task(asyncio.to_thread(cargar_y_vectorizar_fuentes))
 
@@ -224,7 +224,6 @@ async def startup_event():
 
 @app.get("/")
 def ruta_raiz():
-    # Respondemos 200 OK a las pruebas de vida (Health Checks) de Render
     return {"status": "online", "mensaje": "Cerebro del Asistente Universitario Activo"}
 
 

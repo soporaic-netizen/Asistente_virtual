@@ -47,44 +47,21 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 SOLUCIÓN DEFINITIVA: Mapeamos explícitamente el 'model' en cada elemento del lote
+# 🔥 SOLUCIÓN NATIVA Y DEFINITIVA: Usamos el cliente oficial de Google GenAI (SDK)
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
         try:
-            api_key = os.environ.get("GEMINI_API_KEY", "")
-            if not api_key:
-                raise ValueError("No se encontró la GEMINI_API_KEY en las variables de entorno.")
+            # El SDK de Google acepta nativamente una lista de textos y gestiona el lote internamente
+            respuesta = cliente_gemini.models.embed_content(
+                model="text-embedding-004",
+                contents=input
+            )
             
-            # Endpoint por lotes bajo v1beta
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
-            
-            # Corregido: 'model' es obligatorio dentro de cada request individual del lote
-            payload = {
-                "requests": [
-                    {
-                        "model": "models/text-embedding-004",
-                        "content": {"parts": [{"text": texto}]}
-                    }
-                    for texto in input
-                ]
-            }
-            
-            respuesta = requests.post(url, json=payload, timeout=15)
-            
-            # Validación de seguridad preventiva
-            if respuesta.status_code != 200:
-                raise Exception(f"Error API Google (Status {respuesta.status_code}): {respuesta.text}")
-                
-            try:
-                resultado_json = respuesta.json()
-            except Exception:
-                raise Exception(f"No se pudo decodificar el JSON de la respuesta. Contenido: {respuesta.text}")
-                
-            # Extraemos los vectores matemáticos devueltos por Google
-            return [e["values"] for e in resultado_json["embeddings"]]
+            # Extraemos los vectores numéricos directamente desde los objetos de respuesta del SDK
+            return [e.values for e in respuesta.embeddings]
             
         except Exception as e:
-            print(f"❌ Error al generar embeddings en la API de Google: {e}")
+            print(f"❌ Error al generar embeddings con el SDK oficial de Google: {e}")
             raise e
 
 # Instanciamos nuestra función cloud optimizada mediante HTTP requests

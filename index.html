@@ -38,7 +38,7 @@
             cursor: pointer; /* Muestra el cursor de mano al pasar sobre el avatar */
         }
         
-        /* 🔥 ANIMACIÓN DE SALTO: Sube 10vh adicionales (de -5vh a -15vh) y regresa */
+        /* ANIMACIÓN DE SALTO: Sube 10vh adicionales (de -5vh a -15vh) y regresa */
         @keyframes efectoSalto {
             0% { transform: translateY(-5vh); }
             50% { transform: translateY(-15vh); }
@@ -50,7 +50,7 @@
             animation: efectoSalto 0.4s ease-out;
         }
         
-        /* 🔥 UBICACIÓN DE CONTROLES: Ajustado a la parte SUPERIOR derecha */
+        /* UBICACIÓN DE CONTROLES: Ajustado a la parte SUPERIOR derecha */
         .controles {
             position: absolute;
             top: 20px;
@@ -85,7 +85,7 @@
             transform: scale(0.95);
         } 
 
-        /* 🔥 UBICACIÓN DEL ESTADO: Posicionado justo DEBAJO de los botones en la parte superior derecha */
+        /* UBICACIÓN DEL ESTADO: Posicionado justo DEBAJO de los botones en la parte superior derecha */
         #status { 
             position: absolute;
             top: 85px;
@@ -173,14 +173,23 @@
             };
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
+            
+            // Cargamos las voces disponibles en el navegador e iniciamos el saludo institucional
             cargarVocesPremium();
 
-            /* 🔥 ASIGNACIÓN DE CLIC/TOQUE: Escuchamos clics dentro del propio entorno gráfico del SVG */
+            /* 🔥 FIX DE INICIO AUTOMÁTICO:
+               Muchos navegadores modernos bloquean el audio automático si el usuario no ha interactuado
+               antes con la pantalla. Para garantizar que funcione, agregamos un pequeño retraso y un salvavidas. */
+            setTimeout(() => {
+                reproducirVozYAnimar("Hola soy ucevesito, el asistente virtual de la ucv. Dime tu consulta");
+            }, 600);
+
+            /* ASIGNACIÓN DE CLIC/TOQUE: Escuchamos clics dentro del propio entorno gráfico del SVG */
             svgDoc.documentElement.addEventListener('click', ejecutarSaltoAvatar);
             svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
         });
 
-        /* 🔥 FUNCIÓN DE SALTO Y CAMBIO DE BOCA */
+        /* FUNCIÓN DE SALTO Y CAMBIO DE BOCA */
         function ejecutarSaltoAvatar() {
             const avatar = document.getElementById('avatar-svg');
             

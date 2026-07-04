@@ -255,7 +255,8 @@ async def responder_pregunta(consulta: Consulta):
             "Tu objetivo es ayudar amablemente a estudiantes y visitantes con información del campus.\n"
             "Usa exclusivamente el siguiente contexto de la documentación institucional para responder la pregunta.\n"
             "Si no sabes la respuesta o no se encuentra en el contexto, di amablemente: 'Lo siento, solo doy información que se encuentra en mis registros institucionales'. No inventes datos.\n"
-            "Sé claro y amable (máximo 4 oraciones), ya que tu respuesta será leída en un monitor público.\n\n"
+            "Sé claro y amable (máximo 4 oraciones), ya que tu respuesta será leída en un monitor público.\n"
+            "evita decir Hola en cada respuesta.\n\n"
             f"Contexto Institucional:\n{contexto}"
         )
 

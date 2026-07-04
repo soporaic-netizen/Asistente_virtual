@@ -33,8 +33,21 @@
             width: 60vw;  
             height: 60vh; 
             display: block;
-            transform: translateY(-5vh); /* 🔥 ELEVACIÓN DE 5VH: Desplaza el avatar hacia arriba */
-            
+            transform: translateY(-5vh); /* Posición inicial elevada */
+            transition: transform 0.1s ease;
+            cursor: pointer; /* Muestra el cursor de mano al pasar sobre el avatar */
+        }
+        
+        /* 🔥 ANIMACIÓN DE SALTO: Sube 10vh adicionales (de -5vh a -15vh) y regresa */
+        @keyframes efectoSalto {
+            0% { transform: translateY(-5vh); }
+            50% { transform: translateY(-15vh); }
+            100% { transform: translateY(-5vh); }
+        }
+
+        /* Clase dinámica que aplicaremos con JavaScript */
+        .animacion-salto {
+            animation: efectoSalto 0.4s ease-out;
         }
         
         /* 🔥 UBICACIÓN DE CONTROLES: Ajustado a la parte SUPERIOR derecha */
@@ -161,7 +174,36 @@
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
             cargarVocesPremium();
+
+            /* 🔥 ASIGNACIÓN DE CLIC/TOQUE: Escuchamos clics dentro del propio entorno gráfico del SVG */
+            svgDoc.documentElement.addEventListener('click', ejecutarSaltoAvatar);
+            svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
         });
+
+        /* 🔥 FUNCIÓN DE SALTO Y CAMBIO DE BOCA */
+        function ejecutarSaltoAvatar() {
+            const avatar = document.getElementById('avatar-svg');
+            
+            // Si ya está saltando, evitamos repetir la animación consecutivamente
+            if (avatar.classList.contains('animacion-salto')) return;
+
+            // Añadimos la clase CSS para iniciar el salto
+            avatar.classList.add('animacion-salto');
+
+            // Guardamos si estaba hablando para no romper el bucle aleatorio de la boca
+            const estabaHablando = !!intervaloHabla;
+            if (!estabaHablando) {
+                cambiarBoca('A');
+            }
+
+            // Al finalizar la animación (400ms), limpiamos la clase y restauramos la boca
+            setTimeout(() => {
+                avatar.classList.remove('animacion-salto');
+                if (!intervaloHabla) {
+                    cambiarBoca('reposo');
+                }
+            }, 400);
+        }
 
         function inyectarAnimacionesNaturales(doc) {
             const style = doc.createElementNS("http://www.w3.org/2000/svg", "style");
@@ -254,7 +296,7 @@
                 lectura.lang = 'es-419'; 
             }
             lectura.rate = 1.1; 
-            lectura.pitch = 1.2;
+            lectura.pitch = 1.3;
 
             lectura.onstart = () => {
                 statusText.innerText = "Estado: UCVsito está respondiendo...";

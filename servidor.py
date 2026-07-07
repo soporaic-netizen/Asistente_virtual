@@ -2,6 +2,7 @@ import os
 import requests
 import re
 import base64  # 🔥 Importación necesaria para convertir el audio a string seguro
+import json    # 🌟 Necesario para procesar el string JSON de la cuenta de servicio
 from bs4 import BeautifulSoup
 from docx import Document as DocxDocument  # Evita colisión de nombres
 from fastapi import FastAPI, HTTPException
@@ -37,9 +38,35 @@ if not API_KEY:
 
 cliente_gemini = genai.Client(api_key=API_KEY)
 
-# 🔥 Inicializamos el cliente de Google Cloud Text-to-Speech
-# Recuerda configurar las credenciales en Render mediante variables de entorno (como GOOGLE_APPLICATION_CREDENTIALS)
-cliente_tts = texttospeech.TextToSpeechClient()
+
+# =====================================================================
+# 🔥 CONFIGURACIÓN SEGURA DE GOOGLE CLOUD TTS PARA RENDER
+# =====================================================================
+cliente_tts = None
+
+# 1. Intentamos leer las credenciales en formato JSON de texto directo desde la variable
+google_json_str = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+if google_json_str:
+    try:
+        # Convertimos la cadena de texto de la variable en un diccionario de Python
+        credenciales_dict = json.loads(google_json_str)
+        # Inicializamos el cliente pasándole directamente las credenciales estructuradas
+        cliente_tts = texttospeech.TextToSpeechClient.from_service_account_info(credenciales_dict)
+        print("✅ Cliente de Google Cloud TTS inicializado correctamente desde variable de entorno (JSON).")
+    except Exception as e:
+        print(f"❌ Error al parsear GOOGLE_CREDENTIALS_JSON: {e}")
+else:
+    # 2. Respaldo por si estás probando localmente con el archivo .json tradicional
+    ruta_archivo = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if ruta_archivo and os.path.exists(ruta_archivo):
+        cliente_tts = texttospeech.TextToSpeechClient()
+        print(f"✅ Cliente TTS inicializado desde archivo local: {ruta_archivo}")
+
+if not cliente_tts:
+    print("⚠️ ADVERTENCIA: No se configuraron credenciales para Google Cloud TTS. El endpoint /preguntar fallará al generar voz.")
+# =====================================================================
+
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
 CARPETA_DB_VECTORIAL = "./db_vectorial"
@@ -284,6 +311,10 @@ async def responder_pregunta(consulta: Consulta):
             )
             texto_final = respuesta.text
             CACHE_RESPUESTAS[pregunta_normalizada] = texto_final
+
+        # Validamos que el cliente de voz esté inicializado correctamente
+        if not cliente_tts:
+            raise HTTPException(status_code=500, detail="El cliente de Google Cloud TTS no está configurado.")
 
         # 🔥 SÍNTESIS DE AUDIO CON GOOGLE CLOUD TEXT-TO-SPEECH
         # Configuramos el texto de entrada que el motor de voz va a procesar

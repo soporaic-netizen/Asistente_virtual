@@ -137,8 +137,12 @@
                 const textoDictado = event.results[0][0].transcript.trim();
                 const textoLimpio = textoDictado.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
 
-                if (textoLimpio === "no") {
-                    statusText.innerText = 'Escuchado: "No". Cerrando canal...';
+                // 🔥 BUSCAR LA PALABRA "NO" DENTRO DE LA FRASE
+                // Esta expresión regular verifica si la palabra "no" existe como elemento independiente dentro del texto capturado
+                const contieneNo = /\bno\b/.test(textoLimpio);
+
+                if (contieneNo) {
+                    statusText.innerText = `Detectada negativa ("${textoDictado}"). Cerrando canal...`;
                     despedirseYSalir();
                     return;
                 }
@@ -189,7 +193,6 @@
             statusText.innerText = "Estado: En reposo";
             
             // 🔥 RESTAURACIÓN DEL SALUDO INICIAL AUTOMÁTICO PREMIUM
-            // Hacemos una petición limpia al backend en cuanto se monta el SVG en el navegador
             setTimeout(async () => {
                 statusText.innerText = "Estado: Generando saludo institucional...";
                 try {
@@ -200,7 +203,6 @@
                     });
                     const data = await response.json();
                     
-                    // Activamos de inmediato el modo mixto para que tras saludar abra el micrófono automáticamente
                     modoRepreguntaActivo = true;
                     reproducirVozYAnimar(data.respuesta, data.audio);
                 } catch (error) {

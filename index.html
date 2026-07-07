@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UCVSITO TU ASISTENTE VIRTUAL</title>
     <style>
-        /* Eliminamos márgenes por defecto y fijamos la pantalla con la imagen de fondo */
         html, body {
             margin: 0;
             padding: 0;
@@ -19,7 +18,6 @@
             font-family: 'Segoe UI', sans-serif;
         }
 
-        /* CONTENEDOR PRINCIPAL: Centra todo el espacio de la pantalla */
         #pantalla-avatar {
             width: 100vw;
             height: 100vh;
@@ -28,29 +26,25 @@
             justify-content: center;
         }
 
-        /* Encapsulamos el SVG en sus proporciones reales para obligar al navegador a obedecer la escala */
         #avatar-svg {
             width: 60vw;  
             height: 60vh; 
             display: block;
-            transform: translateY(-5vh); /* Posición inicial elevada */
+            transform: translateY(-5vh);
             transition: transform 0.1s ease;
-            cursor: pointer; /* Muestra el cursor de mano al pasar sobre el avatar */
+            cursor: pointer;
         }
         
-        /* ANIMACIÓN DE SALTO: Sube 10vh adicionales (de -5vh a -15vh) y regresa */
         @keyframes efectoSalto {
             0% { transform: translateY(-5vh); }
             50% { transform: translateY(-15vh); }
             100% { transform: translateY(-5vh); }
         }
 
-        /* Clase dinámica que aplicaremos con JavaScript */
         .animacion-salto {
             animation: efectoSalto 0.4s ease-out;
         }
         
-        /* UBICACIÓN DE CONTROLES: Ajustado a la parte SUPERIOR derecha */
         .controles {
             position: absolute;
             top: 20px;
@@ -85,7 +79,6 @@
             transform: scale(0.95);
         } 
 
-        /* UBICACIÓN DEL ESTADO: Posicionado justo DEBAJO de los botones en la parte superior derecha */
         #status { 
             position: absolute;
             top: 85px;
@@ -108,7 +101,7 @@
     <div id="status">Estado: Cargando a UCVsito...</div>
 
     <div class="controles">
-        <button id="btn-hablar" onclick="activarMicrofono()">📢 Pregúntame </button>
+        <button id="btn-hablar" onclick="iniciarConversacion()">📢 Pregúntame </button>
         <button onclick="detenerTodo()">Detener</button>
     </div>
 
@@ -122,9 +115,12 @@
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let reconocimiento = null;
-        
-        // 🔥 Reemplazamos el sintetizador web local por una variable global para controlar el objeto de audio premium
         let audioActual = null; 
+
+        // 🔥 VARIABLES DE CONTROL PARA MODO MIXTO E INTELIGENTE
+        let modoRepreguntaActivo = false; 
+        let temporizadorSilencio = null;
+        const TIEMPO_ESPERA_SILENCIO = 4000; // 4 segundos
 
         if (SpeechRecognition) {
             reconocimiento = new SpeechRecognition(); 
@@ -132,8 +128,23 @@
             reconocimiento.interimResults = false;
             reconocimiento.maxAlternatives = 1;
 
+            // Se dispara cuando el usuario empieza a hablar: cancelamos el conteo de los 4 segundos
+            reconocimiento.onspeechstart = () => {
+                limpiarTemporizadorSilencio();
+            };
+
             reconocimiento.onresult = async (event) => {
-                const textoDictado = event.results[0][0].transcript;
+                limpiarTemporizadorSilencio();
+                const textoDictado = event.results[0][0].transcript.trim();
+                const textoLimpio = textoDictado.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
+
+                // 🔥 CONDICIÓN DE SALIDA EXPLÍCITA: Si el usuario dice "no"
+                if (textoLimpio === "no") {
+                    statusText.innerText = 'Escuchado: "No". Cerrando canal...';
+                    despedirseYSalir();
+                    return;
+                }
+
                 statusText.innerText = `Escuchado: "${textoDictado}"...`;
                 btnHablar.innerText = "⏳ Pensando...";
                 btnHablar.style.backgroundColor = "#ffcc00";
@@ -146,19 +157,23 @@
                     });
                     const data = await response.json();
                     
-                    // 🔥 Enviamos tanto la respuesta en texto como el audio en Base64 devuelto por Google Cloud
+                    // Activamos de forma transparente el modo continuo para la siguiente interacción
+                    modoRepreguntaActivo = true;
                     reproducirVozYAnimar(data.respuesta, data.audio);
                 } catch (error) {
                     console.error("Error conectando al servidor:", error);
                     statusText.innerText = "Estado: Error al conectar con el servidor.";
-                    restaurarBoton();
+                    apagarModoContinuo();
                 }
             };
 
             reconocimiento.onerror = (event) => {
                 console.error("Error en micrófono: ", event.error);
-                statusText.innerText = "Estado: Error en micrófono.";
-                restaurarBoton();
+                // Si hay un error de tipo 'no-speech' (silencio prolongado detectado por el navegador), se maneja por nuestro timer
+                if (event.error !== 'no-speech') {
+                    statusText.innerText = "Estado: Error en micrófono.";
+                    apagarModoContinuo();
+                }
             };
 
             reconocimiento.onspeechend = () => {
@@ -177,50 +192,19 @@
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
             
-            /* 🔥 FIX DE SALUDO INICIAL EN BASE64:
-               Para que el saludo inicial use también la voz hiperrealista de Google Cloud TTS, 
-               hacemos una consulta ficticia de bienvenida al servidor en cuanto carga el archivo. */
-            setTimeout(async () => {
-                try {
-                    const response = await fetch('https://asistente-virtual-vi44.onrender.com/preguntar', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ pregunta: "¡Hola!, soy ucevesito, el asistente virtual de la ucv. Dime tu consulta" })
-                    });
-                    const data = await response.json();
-                    reproducirVozYAnimar(data.respuesta, data.audio);
-                } catch (error) {
-                    console.warn("No se pudo reproducir el saludo inicial premium de forma automática:", error);
-                }
-            }, 600);
-
-            /* ASIGNACIÓN DE CLIC/TOQUE: Escuchamos clics dentro del propio entorno gráfico del SVG */
             svgDoc.documentElement.addEventListener('click', ejecutarSaltoAvatar);
             svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
         });
 
-        /* FUNCIÓN DE SALTO Y CAMBIO DE BOCA */
         function ejecutarSaltoAvatar() {
             const avatar = document.getElementById('avatar-svg');
-            
-            // Si ya está saltando, evitamos repetir la animación consecutivamente
             if (avatar.classList.contains('animacion-salto')) return;
-
-            // Añadimos la clase CSS para iniciar el salto
             avatar.classList.add('animacion-salto');
-
-            // Guardamos si estaba hablando para no romper el bucle aleatorio de la boca
             const estabaHablando = !!intervaloHabla;
-            if (!estabaHablando) {
-                cambiarBoca('A');
-            }
-
-            // Al finalizar la animación (400ms), limpiamos la clase y restauramos la boca
+            if (!estabaHablando) cambiarBoca('A');
             setTimeout(() => {
                 avatar.classList.remove('animacion-salto');
-                if (!intervaloHabla) {
-                    cambiarBoca('reposo');
-                }
+                if (!intervaloHabla) cambiarBoca('reposo');
             }, 400);
         }
 
@@ -236,27 +220,23 @@
                     transform-origin: center center; 
                     animation: parpadear 4s infinite;
                 }
-
                 @keyframes moverCejaIzq {
                     0%, 71%, 100% { transform: translateY(0px) rotate(0deg); }
                     73% { transform: translateY(-1.5px) rotate(-2deg); }
                     75% { transform: translateY(-1.5px) rotate(-2deg); }
                     80% { transform: translateY(0px) rotate(0deg); }
                 }
-
                 @keyframes moverCejaDer {
                     0%, 72%, 100% { transform: translateY(0px) rotate(0deg); }
                     75% { transform: translateY(-2.0px) rotate(1.5deg); }
                     77% { transform: translateY(-2.0px) rotate(1.5deg); }
                     80% { transform: translateY(0px) rotate(0deg); }
                 }
-
                 #ceja-izq {
                     transform-box: fill-box;
                     transform-origin: center center;
                     animation: moverCejaIzq 8s infinite ease-in-out;
                 }
-
                 #ceja-der {
                     transform-box: fill-box;
                     transform-origin: center center;
@@ -270,75 +250,145 @@
             Object.values(bocas).forEach(boca => {
                 if(boca) boca.style.display = 'none';
             });
-            if(bocas[tipoBoca]) {
-                bocas[tipoBoca].style.display = 'block';
-            }
+            if(bocas[tipoBoca]) bocas[tipoBoca].style.display = 'block';
+        }
+
+        // Acción inicial del botón manual
+        function iniciarConversacion() {
+            modoRepreguntaActivo = false; 
+            activarMicrofono();
         }
 
         function activarMicrofono() {
             if (!reconocimiento) {
-                alert("Tu navegador no soporta control por voz. Prueba usando Google Chrome o Microsoft Edge.");
+                alert("Tu navegador no soporta control por voz.");
                 return;
             }
-            
-            // 🔥 Detenemos cualquier flujo de audio anterior antes de escuchar de nuevo
+            limpiarTemporizadorSilencio();
             if (audioActual) {
                 audioActual.pause();
                 audioActual = null;
             }
             detenerAnimacionBoca();
-            reconocimiento.start();
-            statusText.innerText = "Estado: Escuchando micrófono...";
-            btnHablar.innerText = "🛑 Escuchando...";
-            btnHablar.style.backgroundColor = "#ff4d4d";
+
+            try {
+                reconocimiento.start();
+                if (modoRepreguntaActivo) {
+                    statusText.innerText = "Estado: Escuchando repregunta (Modo Continuo)...";
+                    btnHablar.innerText = "🔄 Repregunta...";
+                    btnHablar.style.backgroundColor = "#00bcd4";
+                    
+                    // 🔥 PROGRAMACIÓN DE SILENCIO: Si en 4 segundos no hay entrada de voz, cerramos
+                    temporizadorSilencio = setTimeout(() => {
+                        statusText.innerText = "Estado: Silencio detectado (4 segundos). Cerrando...";
+                        despedirseYSalir();
+                    }, TIEMPO_ESPERA_SILENCIO);
+                } else {
+                    statusText.innerText = "Estado: Escuchando micrófono...";
+                    btnHablar.innerText = "🛑 Escuchando...";
+                    btnHablar.style.backgroundColor = "#ff4d4d";
+                }
+            } catch(e) {
+                console.warn("Reconocimiento ya estaba iniciado:", e);
+            }
         }
 
-        // 🔥 NUEVA FUNCIÓN OPTIMIZADA PARA REPRODUCIR AUDIO CLOUD EN BASE64
         function reproducirVozYAnimar(texto, audioBase64) {
             if (!audioBase64) {
-                console.warn("No se recibió una cadena de audio válida desde el servidor.");
-                restaurarBoton();
+                apagarModoContinuo();
                 return;
             }
-            
-            // Si hay un audio sonando, lo cancelamos de inmediato
-            if (audioActual) {
-                audioActual.pause();
-            }
+            if (audioActual) audioActual.pause();
 
-            // Convertimos los datos Base64 devueltos en una URI de tipo de dato MP3 reproducible
             const audioUrl = `data:audio/mp3;base64,${audioBase64}`;
             audioActual = new Audio(audioUrl);
 
-            // Vinculamos los eventos nativos del reproductor de HTML5 con la animación del avatar
             audioActual.onplay = () => {
                 statusText.innerText = "Estado: UCVsito está respondiendo...";
-                btnHablar.innerText = "🗣️ Hablando...";
-                btnHablar.style.backgroundColor = "#00cc66";
-
-                // Iniciamos la modulación aleatoria de las capas de la boca
+                if (!modoRepreguntaActivo) {
+                    btnHablar.innerText = "🗣️ Hablando...";
+                    btnHablar.style.backgroundColor = "#00cc66";
+                }
                 iniciarAnimacionBoca();
             };
 
             audioActual.onended = () => {
                 detenerAnimacionBoca();
-                restaurarBoton();
                 audioActual = null;
+
+                // 🔥 EVALUACIÓN MODO MIXTO: Al terminar el audio, si está activo el modo continuo, reabrimos el micro solo.
+                if (modoRepreguntaActivo) {
+                    setTimeout(() => {
+                        activarMicrofono(); 
+                    }, 400);
+                } else {
+                    apagarModoContinuo();
+                }
             };
 
             audioActual.onerror = (e) => {
-                console.error("Error durante la reproducción del streaming de audio premium:", e);
+                console.error("Error en audio:", e);
                 detenerAnimacionBoca();
-                restaurarBoton();
-                audioActual = null;
+                apagarModoContinuo();
             };
 
-            // Lanzamos la reproducción
             audioActual.play().catch(error => {
-                console.warn("La reproducción automática de audio fue pausada por políticas del navegador:", error);
+                console.warn("Reproducción bloqueada:", error);
                 detenerAnimacionBoca();
-                restaurarBoton();
+                apagarModoContinuo();
             });
+        }
+
+        // 🔥 ACCIÓN DE CIERRE: Despedida con voz realista consultada directo al backend antes de bloquear
+        async function despedirseYSalir() {
+            if (reconocimiento) reconocimiento.stop();
+            limpiarTemporizadorSilencio();
+            modoRepreguntaActivo = false; // Bloqueamos repreguntas posteriores
+
+            statusText.innerText = "Estado: Despidiéndose...";
+            btnHablar.innerText = "👋 Despidiéndose...";
+            btnHablar.style.backgroundColor = "#9c27b0";
+
+            try {
+                // Solicita una despedida formal al servidor basada en tus registros
+                const response = await fetch('https://asistente-virtual-vi44.onrender.com/preguntar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pregunta: "Adiós gracias por tu ayuda" })
+                });
+                const data = await response.json();
+                
+                // Reproduce el audio de despedida y al finalizar apaga todo el flujo
+                reproducirVozYAnimar(data.respuesta, data.audio);
+            } catch (error) {
+                console.warn("No se pudo obtener despedida premium, cerrando de inmediato.");
+                apagarModoContinuo();
+            }
+        }
+
+        function limpiarTemporizadorSilencio() {
+            if (temporizadorSilencio) {
+                clearTimeout(temporizadorSilencio);
+                temporizadorSilencio = null;
+            }
+        }
+
+        function apagarModoContinuo() {
+            limpiarTemporizadorSilencio();
+            modoRepreguntaActivo = false;
+            if (reconocimiento) reconocimiento.stop();
+            if (audioActual) {
+                audioActual.pause();
+                audioActual = null;
+            }
+            detenerAnimacionBoca();
+            btnHablar.innerText = "📢 Pregúntame";
+            btnHablar.style.backgroundColor = "";
+            statusText.innerText = "Estado: En reposo (Pulsa el botón)";
+        }
+
+        function detenerTodo() {
+            apagarModoContinuo();
         }
 
         function iniciarAnimacionBoca() {
@@ -354,24 +404,6 @@
             clearInterval(intervaloHabla);
             intervaloHabla = null;
             cambiarBoca('reposo');
-        }
-
-        function restaurarBoton() {
-            btnHablar.innerText = "📢 Pregúntame";
-            btnHablar.style.backgroundColor = "";
-            statusText.innerText = "Estado: En reposo";
-        }
-
-        function detenerTodo() {
-            if (reconocimiento) reconocimiento.stop();
-            
-            // 🔥 Detenemos el objeto de audio nativo si existe
-            if (audioActual) {
-                audioActual.pause();
-                audioActual = null;
-            }
-            detenerAnimacionBoca();
-            restaurarBoton();
         }
     </script>
 </body>

@@ -320,7 +320,7 @@
                 if (modoRepreguntaActivo) {
                     setTimeout(() => {
                         activarMicrofono(); 
-                    }, 400);
+                    }, 300);
                 } else {
                     apagarModoContinuo();
                 }
@@ -354,7 +354,7 @@
                 const response = await fetch('https://asistente-virtual-vi44.onrender.com/preguntar', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pregunta: "Adiós gracias por tu ayuda" })
+                    body: JSON.stringify({ pregunta: "Adiós gracias" })
                 });
                 const data = await response.json();
                 

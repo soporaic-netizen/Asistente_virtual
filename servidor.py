@@ -297,7 +297,8 @@ async def responder_pregunta(consulta: Consulta):
                 "Usa exclusivamente el siguiente contexto de la documentación institucional para responder la pregunta.\n"
                 "Si no sabes la respuesta o no se encuentra en el contexto, di amablemente: 'Lo siento, solo doy información que se encuentra en mis registros institucionales'. No inventes datos.\n"
                 "Sé claro y amable (máximo 3 oraciones), ya que tu respuesta será leída en un monitor público.\n"
-                "🔥 CRÍTICO: Termina tu respuesta con una pregunta corta que invite a continuar, por ejemplo: '¿Te ayudo en algo más?' o '¿Tienes alguna otra consulta?'\n"
+                "Saluda solo al iniciar.\n"
+                "🔥 CRÍTICO: Termina tu respuesta con una pregunta corta que invite a continuar, por ejemplo: '¿Te ayudo en algo más?' o '¿Tienes alguna otra consulta?', pero no uses siempre la misma\n"
                 "Si no hay mas preguntas (silencio) o te dicen NO GRACIAS, solo te despides.\n\n"
                  f"Contexto Institucional:\n{contexto}"
             )

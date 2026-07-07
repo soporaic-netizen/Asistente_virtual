@@ -121,9 +121,10 @@
         const btnHablar = document.getElementById('btn-hablar');
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const sintentizadorVoz = window.speechSynthesis;
         let reconocimiento = null;
-        let vozSeleccionada = null;
+        
+        // 🔥 Reemplazamos el sintetizador web local por una variable global para controlar el objeto de audio premium
+        let audioActual = null; 
 
         if (SpeechRecognition) {
             reconocimiento = new SpeechRecognition(); 
@@ -144,7 +145,9 @@
                         body: JSON.stringify({ pregunta: textoDictado })
                     });
                     const data = await response.json();
-                    reproducirVozYAnimar(data.respuesta);
+                    
+                    // 🔥 Enviamos tanto la respuesta en texto como el audio en Base64 devuelto por Google Cloud
+                    reproducirVozYAnimar(data.respuesta, data.audio);
                 } catch (error) {
                     console.error("Error conectando al servidor:", error);
                     statusText.innerText = "Estado: Error al conectar con el servidor.";
@@ -174,14 +177,21 @@
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
             
-            // Cargamos las voces disponibles en el navegador e iniciamos el saludo institucional
-            cargarVocesPremium();
-
-            /* 🔥 FIX DE INICIO AUTOMÁTICO:
-               Muchos navegadores modernos bloquean el audio automático si el usuario no ha interactuado
-               antes con la pantalla. Para garantizar que funcione, agregamos un pequeño retraso y un salvavidas. */
-            setTimeout(() => {
-                reproducirVozYAnimar("Hola, soy ucevesito, el asistente virtual de la ucb,  Dime tu consulta");
+            /* 🔥 FIX DE SALUDO INICIAL EN BASE64:
+               Para que el saludo inicial use también la voz hiperrealista de Google Cloud TTS, 
+               hacemos una consulta ficticia de bienvenida al servidor en cuanto carga el archivo. */
+            setTimeout(async () => {
+                try {
+                    const response = await fetch('https://asistente-virtual-vi44.onrender.com/preguntar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pregunta: "Hola soy ucevesito, el asistente virtual de la ucv. Dime tu consulta" })
+                    });
+                    const data = await response.json();
+                    reproducirVozYAnimar(data.respuesta, data.audio);
+                } catch (error) {
+                    console.warn("No se pudo reproducir el saludo inicial premium de forma automática:", error);
+                }
             }, 600);
 
             /* ASIGNACIÓN DE CLIC/TOQUE: Escuchamos clics dentro del propio entorno gráfico del SVG */
@@ -265,29 +275,17 @@
             }
         }
 
-        function cargarVocesPremium() {
-            if (!sintentizadorVoz) return;
-            let voces = sintentizadorVoz.getVoices();
-            vozSeleccionada = voces.find(v => v.name.includes('Rodrigo') && v.name.includes('Natural')) ||
-                              voces.find(v => v.lang.includes('es-US') && v.name.includes('Google')) ||
-                              voces.find(v => v.lang.startsWith('es') && !v.lang.includes('es-ES'));
-
-            if (sintentizadorVoz.onvoiceschanged !== undefined) {
-                sintentizadorVoz.onvoiceschanged = () => {
-                    voces = sintentizadorVoz.getVoices();
-                    vozSeleccionada = voces.find(v => v.name.includes('Rodrigo') && v.name.includes('Natural')) ||
-                                      voces.find(v => v.lang.includes('es-US') && v.name.includes('Google')) ||
-                                      voces.find(v => v.lang.startsWith('es') && !v.lang.includes('es-ES'));
-                };
-            }
-        }
-
         function activarMicrofono() {
             if (!reconocimiento) {
                 alert("Tu navegador no soporta control por voz. Prueba usando Google Chrome o Microsoft Edge.");
                 return;
             }
-            sintentizadorVoz.cancel();
+            
+            // 🔥 Detenemos cualquier flujo de audio anterior antes de escuchar de nuevo
+            if (audioActual) {
+                audioActual.pause();
+                audioActual = null;
+            }
             detenerAnimacionBoca();
             reconocimiento.start();
             statusText.innerText = "Estado: Escuchando micrófono...";
@@ -295,40 +293,52 @@
             btnHablar.style.backgroundColor = "#ff4d4d";
         }
 
-        function reproducirVozYAnimar(texto) {
-            if (!texto) return;
-            const textoConPausa = ".. ," + texto; 
-            const lectura = new SpeechSynthesisUtterance(textoConPausa);
-            if (vozSeleccionada) {
-                lectura.voice = vozSeleccionada;
-            } else {
-                lectura.lang = 'es-419'; 
+        // 🔥 NUEVA FUNCIÓN OPTIMIZADA PARA REPRODUCIR AUDIO CLOUD EN BASE64
+        function reproducirVozYAnimar(texto, audioBase64) {
+            if (!audioBase64) {
+                console.warn("No se recibió una cadena de audio válida desde el servidor.");
+                restaurarBoton();
+                return;
             }
-            lectura.rate = 1.1; 
-            lectura.pitch = 1.3;
+            
+            // Si hay un audio sonando, lo cancelamos de inmediato
+            if (audioActual) {
+                audioActual.pause();
+            }
 
-            lectura.onstart = () => {
+            // Convertimos los datos Base64 devueltos en una URI de tipo de dato MP3 reproducible
+            const audioUrl = `data:audio/mp3;base64,${audioBase64}`;
+            audioActual = new Audio(audioUrl);
+
+            // Vinculamos los eventos nativos del reproductor de HTML5 con la animación del avatar
+            audioActual.onplay = () => {
                 statusText.innerText = "Estado: UCVsito está respondiendo...";
                 btnHablar.innerText = "🗣️ Hablando...";
                 btnHablar.style.backgroundColor = "#00cc66";
 
-                setTimeout(() => {
-                    if (sintentizadorVoz.speaking) {
-                        iniciarAnimacionBoca();
-                    }
-                }, 300); 
+                // Iniciamos la modulación aleatoria de las capas de la boca
+                iniciarAnimacionBoca();
             };
 
-            lectura.onend = () => {
+            audioActual.onended = () => {
                 detenerAnimacionBoca();
                 restaurarBoton();
+                audioActual = null;
             };
 
-            lectura.onerror = () => {
+            audioActual.onerror = (e) => {
+                console.error("Error durante la reproducción del streaming de audio premium:", e);
                 detenerAnimacionBoca();
                 restaurarBoton();
+                audioActual = null;
             };
-            sintentizadorVoz.speak(lectura);
+
+            // Lanzamos la reproducción
+            audioActual.play().catch(error => {
+                console.warn("La reproducción automática de audio fue pausada por políticas del navegador:", error);
+                detenerAnimacionBoca();
+                restaurarBoton();
+            });
         }
 
         function iniciarAnimacionBoca() {
@@ -354,7 +364,12 @@
 
         function detenerTodo() {
             if (reconocimiento) reconocimiento.stop();
-            sintentizadorVoz.cancel();
+            
+            // 🔥 Detenemos el objeto de audio nativo si existe
+            if (audioActual) {
+                audioActual.pause();
+                audioActual = null;
+            }
             detenerAnimacionBoca();
             restaurarBoton();
         }

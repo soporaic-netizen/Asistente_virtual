@@ -1,6 +1,7 @@
 import os
 import requests
 import re
+import base64  # 🔥 Importación necesaria para convertir el audio a string seguro
 from bs4 import BeautifulSoup
 from docx import Document as DocxDocument  # Evita colisión de nombres
 from fastapi import FastAPI, HTTPException
@@ -12,6 +13,7 @@ import chromadb
 from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 from google import genai
 from google.genai import types
+from google.cloud import texttospeech  # 🔥 Importación oficial de Google Cloud TTS
 from langchain_core.documents import Document as LangchainDocument  # Estructura de datos base
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -34,6 +36,10 @@ if not API_KEY:
     raise RuntimeError("No existe GEMINI_API_KEY")
 
 cliente_gemini = genai.Client(api_key=API_KEY)
+
+# 🔥 Inicializamos el cliente de Google Cloud Text-to-Speech
+# Recuerda configurar las credenciales en Render mediante variables de entorno (como GOOGLE_APPLICATION_CREDENTIALS)
+cliente_tts = texttospeech.TextToSpeechClient()
 
 CARPETA_DOCUMENTOS = "./documentos_uni"
 CARPETA_DB_VECTORIAL = "./db_vectorial"
@@ -140,6 +146,10 @@ def cargar_y_vectorizar_fuentes():
         for archivo in os.listdir(CARPETA_DOCUMENTOS):
             ruta_completa = os.path.join(CARPETA_DOCUMENTOS, archivo)
             
+            # 🔥 Omitimos los archivos temporales de Word para evitar fallas
+            if archivo.startswith("~$"):
+                continue
+                
             if archivo in fuentes_existentes:
                 continue
                 
@@ -234,44 +244,77 @@ async def responder_pregunta(consulta: Consulta):
     try:
         pregunta_normalizada = consulta.pregunta.strip().lower()
         
+        # Guardaremos el texto de la respuesta final aquí
+        texto_final = ""
+
+        # Verificamos si la respuesta ya existe en caché para mitigar consumo de tokens
         if pregunta_normalizada in CACHE_RESPUESTAS:
             print("🚀 Respuesta entregada desde la caché local (0 llamadas consumidas a Gemini)")
-            return {"respuesta": CACHE_RESPUESTAS[pregunta_normalizada]}
+            texto_final = CACHE_RESPUESTAS[pregunta_normalizada]
+        else:
+            contexto = ""
+            
+            if coleccion.count() > 0:
+                resultado_busqueda = coleccion.query(
+                    query_texts=[consulta.pregunta],
+                    n_results=3
+                )
+                if resultado_busqueda and 'documents' in resultado_busqueda and resultado_busqueda['documents']:
+                    documentos_encontrados = resultado_busqueda['documents'][0]
+                    documentos_limpios = [doc for doc in documentos_encontrados if doc]
+                    contexto = "\n".join(documentos_limpios)
 
-        contexto = ""
-        
-        if coleccion.count() > 0:
-            resultado_busqueda = coleccion.query(
-                query_texts=[consulta.pregunta],
-                n_results=3
+            prompt_sistema = (
+                "Eres el asistente virtual interactivo oficial de la universidad cesar vallejo de la sede o campus de la ciudad de Tarapoto, representado por un avatar en una pantalla.\n"
+                "Tu objetivo es ayudar amablemente a estudiantes y visitantes con información del campus.\n"
+                "Usa exclusivamente el siguiente contexto de la documentación institucional para responder la pregunta.\n"
+                "Si no sabes la respuesta o no se encuentra en el contexto, di amablemente: 'Lo siento, solo doy información que se encuentra en mis registros institucionales'. No inventes datos.\n"
+                "Sé claro y amable (máximo 4 oraciones), ya que tu respuesta será leída en un monitor público.\n"
+                "evita decir Hola en cada respuesta.\n\n"
+                f"Contexto Institucional:\n{contexto}"
             )
-            if resultado_busqueda and 'documents' in resultado_busqueda and resultado_busqueda['documents']:
-                documentos_encontrados = resultado_busqueda['documents'][0]
-                documentos_limpios = [doc for doc in documentos_encontrados if doc]
-                contexto = "\n".join(documentos_limpios)
 
-        prompt_sistema = (
-            "Eres el asistente virtual interactivo oficial de la universidad cesar vallejo de la sede o campus de la ciudad de Tarapoto, representado por un avatar en una pantalla.\n"
-            "Tu objetivo es ayudar amablemente a estudiantes y visitantes con información del campus.\n"
-            "Usa exclusivamente el siguiente contexto de la documentación institucional para responder la pregunta.\n"
-            "Si no sabes la respuesta o no se encuentra en el contexto, di amablemente: 'Lo siento, solo doy información que se encuentra en mis registros institucionales'. No inventes datos.\n"
-            "Sé claro y amable (máximo 4 oraciones), ya que tu respuesta será leída en un monitor público.\n"
-            "evita decir Hola en cada respuesta.\n\n"
-            f"Contexto Institucional:\n{contexto}"
-        )
-
-        respuesta = cliente_gemini.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=consulta.pregunta,
-            config=types.GenerateContentConfig(
-                system_instruction=prompt_sistema,
-                temperature=0.3
+            respuesta = cliente_gemini.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=consulta.pregunta,
+                config=types.GenerateContentConfig(
+                    system_instruction=prompt_sistema,
+                    temperature=0.3
+                )
             )
+            texto_final = respuesta.text
+            CACHE_RESPUESTAS[pregunta_normalizada] = texto_final
+
+        # 🔥 SÍNTESIS DE AUDIO CON GOOGLE CLOUD TEXT-TO-SPEECH
+        # Configuramos el texto de entrada que el motor de voz va a procesar
+        synthesis_input = texttospeech.SynthesisInput(text=texto_final)
+        
+        # Seleccionamos parámetros de una voz premium en español (ejemplo: es-US-Neural2-B)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="es-US",
+            name="es-US-Neural2-B" 
         )
         
-        CACHE_RESPUESTAS[pregunta_normalizada] = respuesta.text
+        # Definimos el formato MP3 de salida y pequeños ajustes naturales
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=1.05,
+            pitch=0.0
+        )
         
-        return {"respuesta": respuesta.text}
+        # Enviamos la solicitud de generación de voz a Google Cloud
+        response_audio = cliente_tts.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
+        
+        # Convertimos los bytes binarios del archivo de audio a una cadena en Base64
+        audio_base64 = base64.b64encode(response_audio.audio_content).decode("utf-8")
+        
+        # Retornamos el texto y el string del audio embebido
+        return {
+            "respuesta": texto_final,
+            "audio": audio_base64
+        }
 
     except Exception as e:
         print(f"❌ ERROR EN ENDPOINT /PREGUNTAR: {str(e)}")

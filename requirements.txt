@@ -6,7 +6,7 @@ docx2txt
 python-docx
 chromadb
 google-genai
-google-cloud-text-to-speech==2.20.0
+google-cloud-texttospeech
 langchain-core
 langchain-community
 pypdf

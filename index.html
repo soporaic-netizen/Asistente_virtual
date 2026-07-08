@@ -116,36 +116,45 @@
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let reconocimiento = null;
         
-        // Objeto de audio global único fijo para iOS
+        // Canal de audio global reutilizable autorizado para iOS
         let audioActual = new Audio(); 
 
         // VARIABLES DE CONTROL DE ESTADOS
         let modoRepreguntaActivo = false; 
         let temporizadorSilencio = null;
-        const TIEMPO_ESPERA_SILENCIO = 4000; // 4 segundos
+        const TIEMPO_ESPERA_SILENCIO = 4000; 
 
-        if (SpeechRecognition) {
-            reconocimiento = new SpeechRecognition(); 
-            reconocimiento.lang = 'es-ES'; 
-            reconocimiento.interimResults = false;
-            reconocimiento.maxAlternatives = 1;
+        // 🔥 FUNCIÓN CRÍTICA: Instancia el micrófono desde cero borrando registros antiguos
+        function inicializarReconocimientoLimpio() {
+            if (!SpeechRecognition) return null;
+            
+            // Si ya existía uno previo, removemos sus listeners por seguridad y lo desechamos
+            if (reconocimiento) {
+                reconocimiento.onstart = null;
+                reconocimiento.onspeechstart = null;
+                reconocimiento.onresult = null;
+                reconocimiento.onerror = null;
+                reconocimiento.onspeechend = null;
+                reconocimiento = null;
+            }
 
-            reconocimiento.onspeechstart = () => {
+            const rec = new SpeechRecognition();
+            rec.lang = 'es-ES'; 
+            rec.interimResults = false;
+            rec.maxAlternatives = 1;
+
+            rec.onspeechstart = () => {
                 limpiarTemporizadorSilencio();
             };
 
-            reconocimiento.onresult = async (event) => {
+            rec.onresult = async (event) => {
                 limpiarTemporizadorSilencio();
-                
-                // Forzar apagado inmediato para liberar el micrófono en iOS
-                try { reconocimiento.stop(); } catch(e){}
+                try { rec.stop(); } catch(e){}
 
                 const textoDictado = event.results[0][0].transcript.trim();
                 const textoLimpio = textoDictado.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
 
-                const contieneNo = /\bno\b/.test(textoLimpio);
-
-                if (contieneNo) {
+                if (/\bno\b/.test(textoLimpio)) {
                     statusText.innerText = `Detectada negativa ("${textoDictado}"). Cerrando canal...`;
                     despedirseYSalir();
                     return;
@@ -172,10 +181,10 @@
                 }
             };
 
-            reconocimiento.onerror = (event) => {
-                console.error("Error en micrófono: ", event.error);
+            rec.onerror = (event) => {
+                console.error("Error capturado en micrófono: ", event.error);
                 if (event.error !== 'no-speech') {
-                    statusText.innerText = "Estado: Error en micrófono.";
+                    statusText.innerText = "Estado: Error en micrófono (" + event.error + ")";
                     apagarModoContinuo();
                 } else if (modoRepreguntaActivo) {
                     statusText.innerText = "Estado: Tiempo de espera agotado.";
@@ -183,9 +192,11 @@
                 }
             };
 
-            reconocimiento.onspeechend = () => {
-                try { reconocimiento.stop(); } catch(e){}
+            rec.onspeechend = () => {
+                try { rec.stop(); } catch(e){}
             };
+
+            return rec;
         }
 
         svgObject.addEventListener('load', () => {
@@ -238,33 +249,37 @@
             if(bocas[tipoBoca]) bocas[tipoBoca].style.display = 'block';
         }
 
-        // 🔥 SOLUCIÓN AL RESETEO DE BOTÓN MANUAL
+        // 🔥 INTERACCIÓN DE BOTÓN MANUAL LIMPIA
         function iniciarConversacion() {
-            // Detenemos de inmediato cualquier remanente del micrófono o audios anteriores
-            try { reconocimiento.stop(); } catch(e){}
+            // 1. Apagamos y matamos cualquier micrófono anterior de inmediato
+            if (reconocimiento) {
+                try { reconocimiento.stop(); } catch(e){}
+            }
             if (audioActual) {
                 try { audioActual.pause(); } catch(e){}
             }
             limpiarTemporizadorSilencio();
             detenerAnimacionBoca();
 
-            // Reseteamos el estado para que NO intente evaluar un flujo continuo viejo
+            // 2. Apagamos explícitamente el modo continuo para esta acción manual
             modoRepreguntaActivo = false; 
 
-            // Activamos y desbloqueamos el hardware de audio para Apple
+            // 3. Desbloqueamos el canal de hardware de audio en Apple con el clic físico
             audioActual.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
             audioActual.play().catch(e => console.log("Pre-activación"));
             
-            // Forzamos un pequeño retardo de 150ms para asegurar que el motor de iOS 
-            // asimile el reseteo técnico antes de llamar a abrir la escucha limpia
+            // 4. 🔥 Re-inicializamos un motor de micrófono completamente nuevo y libre de caché
+            reconocimiento = inicializarReconocimientoLimpio();
+
+            // 5. Pequeña holgura de ejecución para que WebKit asimile el nuevo objeto de captura
             setTimeout(() => {
                 activarMicrofono();
-            }, 150);
+            }, 100);
         }
 
         function activarMicrofono() {
             if (!reconocimiento) {
-                alert("Tu navegador no soporta control por voz.");
+                alert("Tu navegador no soporta control por voz o la inicialización falló.");
                 return;
             }
             limpiarTemporizadorSilencio();
@@ -284,6 +299,7 @@
                     btnHablar.innerText = "🛑 Escuchando...";
                     btnHablar.style.backgroundColor = "#ff4d4d";
                 }
+                
                 reconocimiento.start();
             } catch(e) {
                 console.warn("Reconocimiento en ejecución:", e);
@@ -310,9 +326,11 @@
             audioActual.onended = () => {
                 detenerAnimacionBoca();
                 if (modoRepreguntaActivo) {
+                    // Si va a repreguntar automáticamente, refrescamos el micrófono antes de abrir la escucha
+                    reconocimiento = inicializarReconocimientoLimpio();
                     setTimeout(() => {
                         activarMicrofono(); 
-                    }, 700);
+                    }, 600);
                 } else {
                     apagarModoContinuo();
                 }
@@ -335,7 +353,9 @@
         }
 
         async function despedirseYSalir() {
-            try { reconocimiento.stop(); } catch(e){}
+            if (reconocimiento) {
+                try { reconocimiento.stop(); } catch(e){}
+            }
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false; 
 
@@ -366,7 +386,9 @@
         function apagarModoContinuo() {
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false;
-            try { reconocimiento.stop(); } catch(e){}
+            if (reconocimiento) {
+                try { reconocimiento.stop(); } catch(e){}
+            }
             detenerAnimacionBoca();
             btnHablar.innerText = "📢 Pregúntame";
             btnHablar.style.backgroundColor = "";
@@ -382,7 +404,7 @@
 
         function iniciarAnimacionBoca() {
             if (intervaloHabla) return;
-            const formasDeBoca = ['A', 'E', 'O', 'reposo'];
+            const formas DeBoca = ['A', 'E', 'O', 'reposo'];
             intervaloHabla = setInterval(() => {
                 const bocaAleatoria = formasDeBoca[Math.floor(Math.random() * formasDeBoca.length)];
                 cambiarBoca(bocaAleatoria);

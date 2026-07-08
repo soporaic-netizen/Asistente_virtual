@@ -115,46 +115,37 @@
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let reconocimiento = null;
-        
-        // Canal de audio global reutilizable autorizado para iOS
-        let audioActual = new Audio(); 
+        let audioActual = null; 
 
-        // VARIABLES DE CONTROL DE ESTADOS
+        // VARIABLES DE CONTROL PARA MODO MIXTO E INTELIGENTE
         let modoRepreguntaActivo = false; 
         let temporizadorSilencio = null;
-        const TIEMPO_ESPERA_SILENCIO = 4000; 
+        const TIEMPO_ESPERA_SILENCIO = 4000; // 4 segundos
 
-        // 🔥 FUNCIÓN CRÍTICA: Instancia el micrófono desde cero borrando registros antiguos
-        function inicializarReconocimientoLimpio() {
-            if (!SpeechRecognition) return null;
-            
-            // Si ya existía uno previo, removemos sus listeners por seguridad y lo desechamos
-            if (reconocimiento) {
-                reconocimiento.onstart = null;
-                reconocimiento.onspeechstart = null;
-                reconocimiento.onresult = null;
-                reconocimiento.onerror = null;
-                reconocimiento.onspeechend = null;
-                reconocimiento = null;
-            }
+        if (SpeechRecognition) {
+            reconocimiento = new SpeechRecognition(); 
+            reconocimiento.lang = 'es-ES'; 
+            reconocimiento.interimResults = false;
+            reconocimiento.maxAlternatives = 1;
 
-            const rec = new SpeechRecognition();
-            rec.lang = 'es-ES'; 
-            rec.interimResults = false;
-            rec.maxAlternatives = 1;
-
-            rec.onspeechstart = () => {
+            reconocimiento.onspeechstart = () => {
                 limpiarTemporizadorSilencio();
             };
 
-            rec.onresult = async (event) => {
+            reconocimiento.onresult = async (event) => {
                 limpiarTemporizadorSilencio();
-                try { rec.stop(); } catch(e){}
+                
+                // 🔥 SOLUCIÓN CRÍTICA PARA IPHONE: Detener el reconocimiento inmediatamente aquí.
+                // Esto obliga a iOS a cerrar la sesión del micrófono liberando el hilo principal 
+                // para que la petición fetch no quede congelada.
+                try { reconocimiento.stop(); } catch(e){}
 
                 const textoDictado = event.results[0][0].transcript.trim();
                 const textoLimpio = textoDictado.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
 
-                if (/\bno\b/.test(textoLimpio)) {
+                const contieneNo = /\bno\b/.test(textoLimpio);
+
+                if (contieneNo) {
                     statusText.innerText = `Detectada negativa ("${textoDictado}"). Cerrando canal...`;
                     despedirseYSalir();
                     return;
@@ -181,22 +172,17 @@
                 }
             };
 
-            rec.onerror = (event) => {
-                console.error("Error capturado en micrófono: ", event.error);
+            reconocimiento.onerror = (event) => {
+                console.error("Error en micrófono: ", event.error);
                 if (event.error !== 'no-speech') {
-                    statusText.innerText = "Estado: Error en micrófono (" + event.error + ")";
+                    statusText.innerText = "Estado: Error en micrófono.";
                     apagarModoContinuo();
-                } else if (modoRepreguntaActivo) {
-                    statusText.innerText = "Estado: Tiempo de espera agotado.";
-                    despedirseYSalir();
                 }
             };
 
-            rec.onspeechend = () => {
-                try { rec.stop(); } catch(e){}
+            reconocimiento.onspeechend = () => {
+                try { reconocimiento.stop(); } catch(e){}
             };
-
-            return rec;
         }
 
         svgObject.addEventListener('load', () => {
@@ -208,7 +194,26 @@
                 'O': svgDoc.getElementById('boca-O')
             };
             inyectarAnimacionesNaturales(svgDoc);
-            statusText.innerText = "Estado: En reposo (Pulsa el botón)";
+            statusText.innerText = "Estado: En reposo";
+            
+            // SALUDO INICIAL AUTOMÁTICO PREMIUM
+            setTimeout(async () => {
+                statusText.innerText = "Estado: Generando saludo institucional...";
+                try {
+                    const response = await fetch('https://asistente-virtual-vi44.onrender.com/preguntar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pregunta: "Hola soy ucevesito, el asistente virtual de la ucv. Dime tu consulta" })
+                    });
+                    const data = await response.json();
+                    
+                    modoRepreguntaActivo = true;
+                    reproducirVozYAnimar(data.respuesta, data.audio);
+                } catch (error) {
+                    console.warn("No se pudo inicializar el saludo premium automáticamente debido a restricciones locales del navegador:", error);
+                    statusText.innerText = "Estado: En reposo (Pulsa el botón)";
+                }
+            }, 800);
 
             svgDoc.documentElement.addEventListener('click', ejecutarSaltoAvatar);
             svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
@@ -238,6 +243,28 @@
                     transform-origin: center center; 
                     animation: parpadear 4s infinite;
                 }
+                @keyframes moverCejaIzq {
+                    0%, 71%, 100% { transform: translateY(0px) rotate(0deg); }
+                    73% { transform: translateY(-1.5px) rotate(-2deg); }
+                    75% { transform: translateY(-1.5px) rotate(-2deg); }
+                    80% { transform: translateY(0px) rotate(0deg); }
+                }
+                @keyframes moverCejaDer {
+                    0%, 72%, 100% { transform: translateY(0px) rotate(0deg); }
+                    75% { transform: translateY(-2.0px) rotate(1.5deg); }
+                    77% { transform: translateY(-2.0px) rotate(1.5deg); }
+                    80% { transform: translateY(0px) rotate(0deg); }
+                }
+                #ceja-izq {
+                    transform-box: fill-box;
+                    transform-origin: center center;
+                    animation: moverCejaIzq 8s infinite ease-in-out;
+                }
+                #ceja-der {
+                    transform-box: fill-box;
+                    transform-origin: center center;
+                    animation: moverCejaDer 8s infinite ease-in-out;
+                }
             `;
             doc.documentElement.appendChild(style);
         }
@@ -249,60 +276,41 @@
             if(bocas[tipoBoca]) bocas[tipoBoca].style.display = 'block';
         }
 
-        // 🔥 INTERACCIÓN DE BOTÓN MANUAL LIMPIA
         function iniciarConversacion() {
-            // 1. Apagamos y matamos cualquier micrófono anterior de inmediato
-            if (reconocimiento) {
-                try { reconocimiento.stop(); } catch(e){}
-            }
-            if (audioActual) {
-                try { audioActual.pause(); } catch(e){}
-            }
-            limpiarTemporizadorSilencio();
-            detenerAnimacionBoca();
-
-            // 2. Apagamos explícitamente el modo continuo para esta acción manual
             modoRepreguntaActivo = false; 
-
-            // 3. Desbloqueamos el canal de hardware de audio en Apple con el clic físico
-            audioActual.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-            audioActual.play().catch(e => console.log("Pre-activación"));
-            
-            // 4. 🔥 Re-inicializamos un motor de micrófono completamente nuevo y libre de caché
-            reconocimiento = inicializarReconocimientoLimpio();
-
-            // 5. Pequeña holgura de ejecución para que WebKit asimile el nuevo objeto de captura
-            setTimeout(() => {
-                activarMicrofono();
-            }, 100);
+            activarMicrofono();
         }
 
         function activarMicrofono() {
             if (!reconocimiento) {
-                alert("Tu navegador no soporta control por voz o la inicialización falló.");
+                alert("Tu navegador no soporta control por voz.");
                 return;
             }
             limpiarTemporizadorSilencio();
+            if (audioActual) {
+                audioActual.pause();
+                audioActual = null;
+            }
+            detenerAnimacionBoca();
 
             try {
+                reconocimiento.start();
                 if (modoRepreguntaActivo) {
-                    statusText.innerText = "Estado: Escuchando repregunta...";
+                    statusText.innerText = "Estado: Escuchando repregunta (Modo Continuo)...";
                     btnHablar.innerText = "🔄 Repregunta...";
                     btnHablar.style.backgroundColor = "#00bcd4";
                     
                     temporizadorSilencio = setTimeout(() => {
-                        statusText.innerText = "Estado: Silencio. Cerrando...";
+                        statusText.innerText = "Estado: Silencio detectado (4 segundos). Cerrando...";
                         despedirseYSalir();
                     }, TIEMPO_ESPERA_SILENCIO);
                 } else {
-                    statusText.innerText = "Estado: Escuchando...";
+                    statusText.innerText = "Estado: Escuchando micrófono...";
                     btnHablar.innerText = "🛑 Escuchando...";
                     btnHablar.style.backgroundColor = "#ff4d4d";
                 }
-                
-                reconocimiento.start();
             } catch(e) {
-                console.warn("Reconocimiento en ejecución:", e);
+                console.warn("Reconocimiento ya estaba iniciado:", e);
             }
         }
 
@@ -311,11 +319,13 @@
                 apagarModoContinuo();
                 return;
             }
+            if (audioActual) audioActual.pause();
 
-            audioActual.src = `data:audio/mp3;base64,${audioBase64}`;
+            const audioUrl = `data:audio/mp3;base64,${audioBase64}`;
+            audioActual = new Audio(audioUrl);
 
             audioActual.onplay = () => {
-                statusText.innerText = "Estado: Respondiendo...";
+                statusText.innerText = "Estado: UCVsito está respondiendo...";
                 if (!modoRepreguntaActivo) {
                     btnHablar.innerText = "🗣️ Hablando...";
                     btnHablar.style.backgroundColor = "#00cc66";
@@ -325,9 +335,11 @@
 
             audioActual.onended = () => {
                 detenerAnimacionBoca();
+                audioActual = null;
+
                 if (modoRepreguntaActivo) {
-                    // Si va a repreguntar automáticamente, refrescamos el micrófono antes de abrir la escucha
-                    reconocimiento = inicializarReconocimientoLimpio();
+                    // 🔥 AJUSTE PARA IPHONE: Damos 600ms de holgura para asegurar de que 
+                    // el hardware de audio del iPhone cambió de modo salida a modo entrada limpia.
                     setTimeout(() => {
                         activarMicrofono(); 
                     }, 600);
@@ -342,10 +354,12 @@
                 apagarModoContinuo();
             };
 
+            // 🔥 MEJORADO PARA IPHONE: iOS bloquea audios asíncronos si el usuario no interactúa.
+            // Al forzar una ejecución con promesa capturada prevenimos congelamientos en Safari.
             const playPromise = audioActual.play();
             if (playPromise !== undefined) {
                 playPromise.catch(error => {
-                    console.error("Fallo la reproducción en iOS:", error);
+                    console.warn("Reproducción retenida por políticas de WebKit de iOS:", error);
                     detenerAnimacionBoca();
                     apagarModoContinuo();
                 });
@@ -353,14 +367,12 @@
         }
 
         async function despedirseYSalir() {
-            if (reconocimiento) {
-                try { reconocimiento.stop(); } catch(e){}
-            }
+            try { reconocimiento.stop(); } catch(e){}
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false; 
 
             statusText.innerText = "Estado: Despidiéndose...";
-            btnHablar.innerText = "👋 Saliendo...";
+            btnHablar.innerText = "👋 Despidiéndose...";
             btnHablar.style.backgroundColor = "#9c27b0";
 
             try {
@@ -372,6 +384,7 @@
                 const data = await response.json();
                 reproducirVozYAnimar(data.respuesta, data.audio);
             } catch (error) {
+                console.warn("No se pudo obtener la despedida premium.");
                 apagarModoContinuo();
             }
         }
@@ -386,8 +399,10 @@
         function apagarModoContinuo() {
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false;
-            if (reconocimiento) {
-                try { reconocimiento.stop(); } catch(e){}
+            try { reconocimiento.stop(); } catch(e){}
+            if (audioActual) {
+                audioActual.pause();
+                audioActual = null;
             }
             detenerAnimacionBoca();
             btnHablar.innerText = "📢 Pregúntame";
@@ -397,14 +412,11 @@
 
         function detenerTodo() {
             apagarModoContinuo();
-            if (audioActual) {
-                try { audioActual.pause(); } catch(e){}
-            }
         }
 
         function iniciarAnimacionBoca() {
             if (intervaloHabla) return;
-            const formas DeBoca = ['A', 'E', 'O', 'reposo'];
+            const formasDeBoca = ['A', 'E', 'O', 'reposo'];
             intervaloHabla = setInterval(() => {
                 const bocaAleatoria = formasDeBoca[Math.floor(Math.random() * formasDeBoca.length)];
                 cambiarBoca(bocaAleatoria);

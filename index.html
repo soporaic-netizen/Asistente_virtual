@@ -134,11 +134,15 @@
 
             reconocimiento.onresult = async (event) => {
                 limpiarTemporizadorSilencio();
+                
+                // 🔥 SOLUCIÓN CRÍTICA PARA IPHONE: Detener el reconocimiento inmediatamente aquí.
+                // Esto obliga a iOS a cerrar la sesión del micrófono liberando el hilo principal 
+                // para que la petición fetch no quede congelada.
+                try { reconocimiento.stop(); } catch(e){}
+
                 const textoDictado = event.results[0][0].transcript.trim();
                 const textoLimpio = textoDictado.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g,"");
 
-                // 🔥 BUSCAR LA PALABRA "NO" DENTRO DE LA FRASE
-                // Esta expresión regular verifica si la palabra "no" existe como elemento independiente dentro del texto capturado
                 const contieneNo = /\bno\b/.test(textoLimpio);
 
                 if (contieneNo) {
@@ -177,7 +181,7 @@
             };
 
             reconocimiento.onspeechend = () => {
-                reconocimiento.stop();
+                try { reconocimiento.stop(); } catch(e){}
             };
         }
 
@@ -192,7 +196,7 @@
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
             
-            // 🔥 RESTAURACIÓN DEL SALUDO INICIAL AUTOMÁTICO PREMIUM
+            // SALUDO INICIAL AUTOMÁTICO PREMIUM
             setTimeout(async () => {
                 statusText.innerText = "Estado: Generando saludo institucional...";
                 try {
@@ -206,7 +210,7 @@
                     modoRepreguntaActivo = true;
                     reproducirVozYAnimar(data.respuesta, data.audio);
                 } catch (error) {
-                    console.warn("No se pudo inicializar el saludo premium automático debido a restricciones locales del navegador:", error);
+                    console.warn("No se pudo inicializar el saludo premium automáticamente debido a restricciones locales del navegador:", error);
                     statusText.innerText = "Estado: En reposo (Pulsa el botón)";
                 }
             }, 800);
@@ -334,9 +338,11 @@
                 audioActual = null;
 
                 if (modoRepreguntaActivo) {
+                    // 🔥 AJUSTE PARA IPHONE: Damos 600ms de holgura para asegurar de que 
+                    // el hardware de audio del iPhone cambió de modo salida a modo entrada limpia.
                     setTimeout(() => {
                         activarMicrofono(); 
-                    }, 400);
+                    }, 600);
                 } else {
                     apagarModoContinuo();
                 }
@@ -348,15 +354,20 @@
                 apagarModoContinuo();
             };
 
-            audioActual.play().catch(error => {
-                console.warn("Reproducción bloqueada automáticamente por el navegador:", error);
-                detenerAnimacionBoca();
-                apagarModoContinuo();
-            });
+            // 🔥 MEJORADO PARA IPHONE: iOS bloquea audios asíncronos si el usuario no interactúa.
+            // Al forzar una ejecución con promesa capturada prevenimos congelamientos en Safari.
+            const playPromise = audioActual.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.warn("Reproducción retenida por políticas de WebKit de iOS:", error);
+                    detenerAnimacionBoca();
+                    apagarModoContinuo();
+                });
+            }
         }
 
         async function despedirseYSalir() {
-            if (reconocimiento) reconocimiento.stop();
+            try { reconocimiento.stop(); } catch(e){}
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false; 
 
@@ -388,7 +399,7 @@
         function apagarModoContinuo() {
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false;
-            if (reconocimiento) reconocimiento.stop();
+            try { reconocimiento.stop(); } catch(e){}
             if (audioActual) {
                 audioActual.pause();
                 audioActual = null;

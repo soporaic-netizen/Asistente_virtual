@@ -116,10 +116,10 @@
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         let reconocimiento = null;
         
-        // 🔥 MEJORA CRÍTICA PARA REPRODUCCIÓN EN IOS: Instanciamos un único objeto de audio global fijo
+        // Objeto de audio global único fijo para iOS
         let audioActual = new Audio(); 
 
-        // VARIABLES DE CONTROL PARA MODO MIXTO E INTELIGENTE
+        // VARIABLES DE CONTROL DE ESTADOS
         let modoRepreguntaActivo = false; 
         let temporizadorSilencio = null;
         const TIEMPO_ESPERA_SILENCIO = 4000; // 4 segundos
@@ -137,7 +137,7 @@
             reconocimiento.onresult = async (event) => {
                 limpiarTemporizadorSilencio();
                 
-                // Detenemos el micrófono inmediatamente para que iOS libere el canal de red
+                // Forzar apagado inmediato para liberar el micrófono en iOS
                 try { reconocimiento.stop(); } catch(e){}
 
                 const textoDictado = event.results[0][0].transcript.trim();
@@ -178,7 +178,7 @@
                     statusText.innerText = "Estado: Error en micrófono.";
                     apagarModoContinuo();
                 } else if (modoRepreguntaActivo) {
-                    // Si es un simple silencio durante una repregunta en iOS, cerramos limpiamente
+                    statusText.innerText = "Estado: Tiempo de espera agotado.";
                     despedirseYSalir();
                 }
             };
@@ -198,9 +198,6 @@
             };
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo (Pulsa el botón)";
-            
-            // Nota: El saludo automático en iOS al cargar la página siempre estará bloqueado por Apple 
-            // a menos que el usuario toque la pantalla primero. Dejamos que funcione por botón en móviles.
 
             svgDoc.documentElement.addEventListener('click', ejecutarSaltoAvatar);
             svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
@@ -241,17 +238,28 @@
             if(bocas[tipoBoca]) bocas[tipoBoca].style.display = 'block';
         }
 
+        // 🔥 SOLUCIÓN AL RESETEO DE BOTÓN MANUAL
         function iniciarConversacion() {
-            // 🔥 TRUCO MAESTRO PARA IPHONE/IPAD: 
-            // Al presionar el botón físicamente, reproducimos un audio en silencio absoluto.
-            // Esto le avisa a Safari que este canal de audio está autorizado por el usuario.
+            // Detenemos de inmediato cualquier remanente del micrófono o audios anteriores
+            try { reconocimiento.stop(); } catch(e){}
             if (audioActual) {
-                audioActual.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
-                audioActual.play().catch(e => console.log("Pre-activación de audio"));
+                try { audioActual.pause(); } catch(e){}
             }
-            
+            limpiarTemporizadorSilencio();
+            detenerAnimacionBoca();
+
+            // Reseteamos el estado para que NO intente evaluar un flujo continuo viejo
             modoRepreguntaActivo = false; 
-            activarMicrofono();
+
+            // Activamos y desbloqueamos el hardware de audio para Apple
+            audioActual.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+            audioActual.play().catch(e => console.log("Pre-activación"));
+            
+            // Forzamos un pequeño retardo de 150ms para asegurar que el motor de iOS 
+            // asimile el reseteo técnico antes de llamar a abrir la escucha limpia
+            setTimeout(() => {
+                activarMicrofono();
+            }, 150);
         }
 
         function activarMicrofono() {
@@ -260,10 +268,8 @@
                 return;
             }
             limpiarTemporizadorSilencio();
-            detenerAnimacionBoca();
 
             try {
-                reconocimiento.start();
                 if (modoRepreguntaActivo) {
                     statusText.innerText = "Estado: Escuchando repregunta...";
                     btnHablar.innerText = "🔄 Repregunta...";
@@ -278,6 +284,7 @@
                     btnHablar.innerText = "🛑 Escuchando...";
                     btnHablar.style.backgroundColor = "#ff4d4d";
                 }
+                reconocimiento.start();
             } catch(e) {
                 console.warn("Reconocimiento en ejecución:", e);
             }
@@ -289,7 +296,6 @@
                 return;
             }
 
-            // Asignamos el nuevo flujo Base64 al canal de audio global previamente verificado
             audioActual.src = `data:audio/mp3;base64,${audioBase64}`;
 
             audioActual.onplay = () => {
@@ -304,7 +310,6 @@
             audioActual.onended = () => {
                 detenerAnimacionBoca();
                 if (modoRepreguntaActivo) {
-                    // Damos una ventana de 700ms para que el hardware de iOS conmute de salida a entrada limpia
                     setTimeout(() => {
                         activarMicrofono(); 
                     }, 700);
@@ -314,16 +319,15 @@
             };
 
             audioActual.onerror = (e) => {
-                console.error("Error reproduciendo el buffer de audio:", e);
+                console.error("Error en audio:", e);
                 detenerAnimacionBoca();
                 apagarModoContinuo();
             };
 
-            // Ejecutamos la promesa capturando cualquier rechazo nativo de WebKit
             const playPromise = audioActual.play();
             if (playPromise !== undefined) {
                 playPromise.catch(error => {
-                    console.error("Fallo la reproducción en iOS. Forzando reseteo técnico.", error);
+                    console.error("Fallo la reproducción en iOS:", error);
                     detenerAnimacionBoca();
                     apagarModoContinuo();
                 });

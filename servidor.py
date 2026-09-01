@@ -3,6 +3,8 @@ import requests
 import re
 import base64  # 🔥 Importación necesaria para convertir el audio a string seguro
 import json    # 🌟 Necesario para procesar el string JSON de la cuenta de servicio
+import time    # ⏳ Importante para gestionar las pausas entre peticiones a la API
+import asyncio
 from bs4 import BeautifulSoup
 from docx import Document as DocxDocument  # Evita colisión de nombres
 from fastapi import FastAPI, HTTPException
@@ -80,24 +82,35 @@ if not os.path.exists(CARPETA_DOCUMENTOS):
 # Inicializar ChromaDB Local
 cliente_chroma = chromadb.PersistentClient(path=CARPETA_DB_VECTORIAL)
 
-# 🔥 CLASE DE EMBEDDING REPARADA
+# 🔥 CLASE DE EMBEDDING REPARADA CON CONTROL DE CUOTA (REINTENTOS)
 class GeminiEmbeddingFunctionCloud(EmbeddingFunction):
     def __call__(self, input: Documents) -> Embeddings:
-        try:
-            # Llamamos al modelo usando el identificador limpio compatible con el SDK v1/v1beta unificado
-            respuesta = cliente_gemini.models.embed_content(
-                model="gemini-embedding-001",
-                contents=list(input)
-            )
-            
-            # Extraemos los vectores numéricos devueltos por el cliente
-            return [e.values for e in respuesta.embeddings]
-            
-        except Exception as e:
-            print(f"❌ Error al generar embeddings con el SDK oficial de Google: {e}")
-            raise e
+        intentos = 0
+        max_intentos = 3
+        espera = 10  # segundos de espera ante error 429
 
-# Instanciamos nuestra función cloud optimizada mediante HTTP requests
+        while intentos < max_intentos:
+            try:
+                # Llamamos al modelo usando el identificador limpio compatible con el SDK v1/v1beta unificado
+                respuesta = cliente_gemini.models.embed_content(
+                    model="gemini-embedding-001",
+                    contents=list(input)
+                )
+                # Extraemos los vectores numéricos devueltos por el cliente
+                return [e.values for e in respuesta.embeddings]
+            except Exception as e:
+                intentos += 1
+                if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                    print(f"⚠️ Línea de cuota de embeddings alcanzada (429). Reintento {intentos}/{max_intentos} en {espera}s...")
+                    time.sleep(espera)
+                    espera += 10  # Incrementa el tiempo en caso de persistir
+                else:
+                    print(f"❌ Error al generar embeddings con el SDK oficial de Google: {e}")
+                    raise e
+        
+        raise RuntimeError("❌ Se superó el límite de reintentos con la API de Embeddings de Google.")
+
+# Instanciamos nuestra función cloud optimizada
 funcion_embedding_cloud = GeminiEmbeddingFunctionCloud()
 
 # Creamos o cargamos la colección vinculada a la nueva función integrada
@@ -227,8 +240,8 @@ def cargar_y_vectorizar_fuentes():
         nombre_limpio = "".join(c for c in nombre_fuente if c.isalnum() or c in "._-")
         ids.append(f"id_{nombre_limpio}_chunk_{i}")
     
-    # Subida por lotes (Batching) para evitar el error 400 de Google
-    TAMANO_LOTE = 90
+    # 🔥 SUBIDA EN LOTES PEQUEÑOS CON DELAY PARA CONTROLAR EL LÍMITE DE CUOTA (RPM)
+    TAMANO_LOTE = 20  # Bajas de 90 a 20 para no saturar las peticiones por minuto
     total_fragmentos = len(fragmentos)
     print(f"📦 Dividiendo {total_fragmentos} fragmentos en lotes de {TAMANO_LOTE} para la API de Google...")
 
@@ -240,15 +253,27 @@ def cargar_y_vectorizar_fuentes():
         lote_ids = ids[inicio:fin]
         
         print(f"🚀 Enviando lote: fragmentos del {inicio} al {fin}...")
-        coleccion.add(
-            documents=lote_textos,
-            metadatas=lote_metadatos,
-            ids=lote_ids
-        )
+        
+        subido_con_exito = False
+        reintentos_lote = 0
+        
+        while not subido_con_exito and reintentos_lote < 3:
+            try:
+                coleccion.add(
+                    documents=lote_textos,
+                    metadatas=lote_metadatos,
+                    ids=lote_ids
+                )
+                subido_con_exito = True
+                print("⏳ Pausa preventiva de 3.5 segundos para respetar los límites de la API...")
+                time.sleep(3.5)  # 🔥 Pausa esencial entre lotes
+            except Exception as e:
+                reintentos_lote += 1
+                print(f"⚠️ Error al subir lote ({e}). Reintentando {reintentos_lote}/3 en 15 segundos...")
+                time.sleep(15)
         
     print(f"✅ ¡Éxito! Se añadieron/actualizaron todos los {total_fragmentos} fragmentos. Total acumulado en DB: {coleccion.count()}.")
 
-import asyncio
 
 @app.on_event("startup")
 async def startup_event():
@@ -319,31 +344,25 @@ async def responder_pregunta(consulta: Consulta):
             raise HTTPException(status_code=500, detail="El cliente de Google Cloud TTS no está configurado.")
 
         # 🔥 SÍNTESIS DE AUDIO CON GOOGLE CLOUD TEXT-TO-SPEECH
-        # Configuramos el texto de entrada que el motor de voz va a procesar
         synthesis_input = texttospeech.SynthesisInput(text=texto_final)
         
-        # Seleccionamos parámetros de una voz premium en español (ejemplo: es-US-Neural2-B)
         voice = texttospeech.VoiceSelectionParams(
             language_code="es-US",
             name="es-US-Neural2-B" 
         )
         
-        # Definimos el formato MP3 de salida y pequeños ajustes naturales
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
             speaking_rate=1.05,
             pitch=0.0
         )
         
-        # Enviamos la solicitud de generación de voz a Google Cloud
         response_audio = cliente_tts.synthesize_speech(
             input=synthesis_input, voice=voice, audio_config=audio_config
         )
         
-        # Convertimos los bytes binarios del archivo de audio a una cadena en Base64
         audio_base64 = base64.b64encode(response_audio.audio_content).decode("utf-8")
         
-        # Retornamos el texto y el string del audio embebido
         return {
             "respuesta": texto_final,
             "audio": audio_base64

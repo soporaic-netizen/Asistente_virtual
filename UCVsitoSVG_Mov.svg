@@ -25,14 +25,14 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="0.11"
-     inkscape:cx="3563.6364"
+     inkscape:cx="3568.1818"
      inkscape:cy="3222.7273"
      inkscape:window-width="1920"
      inkscape:window-height="989"
      inkscape:window-x="-9"
      inkscape:window-y="-9"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g104"
+     inkscape:current-layer="BRAZO_DER_GIRA"
      showgrid="false" /><defs
      id="defs1"><inkscape:path-effect
        effect="skeletal"
@@ -1058,7 +1058,7 @@
          id="path166"
          inkscape:label="muñecq_izq" /></g></g><g
      inkscape:groupmode="layer"
-     id="layer10"
+     id="PIERNA_DER"
      inkscape:label="PIERNA_DER"
      style="display:inline"><path
        style="display:inline;opacity:1;fill:url(#linearGradient123);fill-opacity:1;stroke:#a60d37;stroke-width:4.08594;stroke-dasharray:none;stroke-opacity:1;paint-order:markers fill stroke"
@@ -1120,7 +1120,7 @@
          sodipodi:nodetypes="assssssassssassssaaaa"
          inkscape:label="p9" /></g></g><g
      inkscape:groupmode="layer"
-     id="g65"
+     id="PIERNA_DER_GIRA"
      inkscape:label="PIERNA_DER_GIRA"
      style="display:none"><path
        style="display:inline;opacity:1;fill:url(#linearGradient69);fill-opacity:1;stroke:#a60d37;stroke-width:4.22477;stroke-dasharray:none;stroke-opacity:1;paint-order:markers fill stroke"
@@ -1229,7 +1229,7 @@
          sodipodi:nodetypes="aaaaaaaaaaa"
          inkscape:label="q6" /></g></g><g
      inkscape:groupmode="layer"
-     id="g46"
+     id="PIERNA_IZQ_GIRA"
      inkscape:label="PIERNA_IZQ_GIRA"
      style="display:none"><path
        style="display:inline;opacity:1;fill:url(#linearGradient138);fill-opacity:1;stroke:#b72222;stroke-width:3.00132;stroke-dasharray:none;stroke-opacity:1;paint-order:markers fill stroke"
@@ -1276,7 +1276,7 @@
          sodipodi:nodetypes="aaaaaaaaaaa"
          inkscape:label="q6" /></g></g><g
      inkscape:groupmode="layer"
-     id="layer5"
+     id="CABEZA"
      inkscape:label="CABEZA"
      style="display:inline"><g
        inkscape:groupmode="layer"
@@ -1423,7 +1423,7 @@
          sodipodi:nodetypes="sssaaaaaasass"
          inkscape:label="boca-sombra" /></g></g><g
      inkscape:groupmode="layer"
-     id="g105"
+     id="BRAZO_IZQ_GIRA"
      inkscape:label="BRAZO_IZQ_GIRA"
      style="display:none"
      transform="rotate(-28.36882,1037.7832,691.26849)"><path
@@ -1450,7 +1450,7 @@
          id="path104"
          inkscape:label="muñecq_izq" /></g></g><g
      inkscape:groupmode="layer"
-     id="g24"
+     id="CABEZA_GIRA"
      inkscape:label="CABEZA_GIRA"
      style="display:none"
      transform="rotate(-2.3305495,646.60806,557.18953)"><g
@@ -1598,7 +1598,7 @@
          sodipodi:nodetypes="sssaaaaaasass"
          inkscape:label="boca-sombra" /></g></g><g
      inkscape:groupmode="layer"
-     id="g74"
+     id="BRAZO_DER_GIRA"
      inkscape:label="BRAZO_DER_GIRA"
      style="display:none"
      transform="matrix(0.99738913,-0.0665349,0.06949569,1.0417727,-34.702876,-60.206804)"><path

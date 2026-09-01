@@ -22,7 +22,7 @@
             width: 100vw;
             height: 100vh;
             display: flex;
-            align-items: end;
+            align-items: flex-end;
             justify-content: center;
         }
 
@@ -95,7 +95,6 @@
 <body>
 
     <div id="pantalla-avatar">
-        <!-- 🔥 SVG actualizado al nuevo archivo con movimiento -->
         <object id="avatar-svg" type="image/svg+xml" data="UCVsitoSVG_Mov.svg"></object>
     </div>
 
@@ -111,9 +110,8 @@
         let svgDoc = null;
         let bocas = {};
         
-        // 🔥 CAPAS DEL AVATAR PARA EL EFECTO DE MOVIMIENTO
-        let capasReposo = [];
-        let capasMovimiento = [];
+        let miembrosReposo = [];
+        let miembrosGira = [];
 
         let intervaloHabla = null;
         const statusText = document.getElementById('status');
@@ -123,10 +121,9 @@
         let reconocimiento = null;
         let audioActual = null; 
 
-        // VARIABLES DE CONTROL PARA MODO MIXTO E INTELIGENTE
         let modoRepreguntaActivo = false; 
         let temporizadorSilencio = null;
-        const TIEMPO_ESPERA_SILENCIO = 4000; // 4 segundos
+        const TIEMPO_ESPERA_SILENCIO = 4000;
 
         if (SpeechRecognition) {
             reconocimiento = new SpeechRecognition(); 
@@ -140,7 +137,6 @@
 
             reconocimiento.onresult = async (event) => {
                 limpiarTemporizadorSilencio();
-                
                 try { reconocimiento.stop(); } catch(e){}
 
                 const textoDictado = event.results[0][0].transcript.trim();
@@ -190,8 +186,13 @@
 
         svgObject.addEventListener('load', () => {
             svgDoc = svgObject.contentDocument;
+
+            if (!svgDoc) {
+                console.error("No se pudo acceder al documento interno del SVG.");
+                return;
+            }
             
-            // MAPEO DE BOCAS
+            // 🔥 Referencias seguras de la boca (buscadas tanto globalmente como dentro de la cabeza)
             bocas = {
                 'reposo': svgDoc.getElementById('boca-reposo'),
                 'A': svgDoc.getElementById('boca-A'),
@@ -199,30 +200,33 @@
                 'O': svgDoc.getElementById('boca-O')
             };
 
-            // 🔥 CAPTURAR CAPAS PARA EL MOVIMIENTO DEL CUERPO
-            capasReposo = [
-                svgDoc.getElementById('CABEZA'),
+            // Referencias de los miembros para movimiento independiente
+            miembrosReposo = [
                 svgDoc.getElementById('BRAZO_DER'),
                 svgDoc.getElementById('BRAZO_IZQ'),
                 svgDoc.getElementById('PIERNA_DER'),
                 svgDoc.getElementById('PIERNA_IZQ')
-            ];
+            ].filter(Boolean);
 
-            capasMovimiento = [
-                svgDoc.getElementById('CABEZA_GIRA'),
+            miembrosGira = [
                 svgDoc.getElementById('BRAZO_DER_GIRA'),
                 svgDoc.getElementById('BRAZO_IZQ_GIRA'),
                 svgDoc.getElementById('PIERNA_DER_GIRA'),
                 svgDoc.getElementById('PIERNA_IZQ_GIRA')
-            ];
+            ].filter(Boolean);
 
-            // Estado inicial del cuerpo: reposo visible, movimiento oculto
-            mostrarCuerpoReposo();
+            // Mantener la cabeza fija de reposo siempre visible para no perder ojos ni cejas
+            const cabezaReposo = svgDoc.getElementById('CABEZA');
+            const cabezaGira = svgDoc.getElementById('CABEZA_GIRA');
+            if (cabezaReposo) cabezaReposo.style.display = 'block';
+            if (cabezaGira) cabezaGira.style.display = 'none';
+
+            resetearMovimientoMiembros();
+            cambiarBoca('reposo');
 
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
             
-            // SALUDO INICIAL AUTOMÁTICO PREMIUM
             setTimeout(async () => {
                 statusText.innerText = "Estado: Generando saludo institucional...";
                 try {
@@ -236,7 +240,7 @@
                     modoRepreguntaActivo = true;
                     reproducirVozYAnimar(data.respuesta, data.audio);
                 } catch (error) {
-                    console.warn("No se pudo inicializar el saludo premium automáticamente debido a restricciones locales del navegador:", error);
+                    console.warn("No se pudo inicializar el saludo premium automáticamente:", error);
                     statusText.innerText = "Estado: En reposo (Pulsa el botón)";
                 }
             }, 800);
@@ -245,22 +249,19 @@
             svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
         });
 
-        // 🔥 FUNCIONES DE CONTROL DE CAPAS DEL CUERPO
-        function mostrarCuerpoReposo() {
-            capasReposo.forEach(capa => { if (capa) capa.style.display = 'block'; });
-            capasMovimiento.forEach(capa => { if (capa) capa.style.display = 'none'; });
+        function resetearMovimientoMiembros() {
+            miembrosReposo.forEach(m => m.style.display = 'block');
+            miembrosGira.forEach(m => m.style.display = 'none');
         }
 
-        function alternarCuerpoAleatorio() {
-            // Se define de forma aleatoria si muestra la pose de reposo o de giro
-            const esMovimiento = Math.random() > 0.4;
+        function alternarMovimientoSuave() {
+            if (miembrosGira.length === 0) return;
             
-            capasReposo.forEach(capa => { 
-                if (capa) capa.style.display = esMovimiento ? 'none' : 'block'; 
-            });
-            capasMovimiento.forEach(capa => { 
-                if (capa) capa.style.display = esMovimiento ? 'block' : 'none'; 
-            });
+            // Cambiar de pose solo de vez en cuando (probabilidad baja para que no se mueva en cada palabra)
+            const hacerMovimiento = Math.random() < 0.25; 
+            
+            miembrosReposo.forEach(m => m.style.display = hacerMovimiento ? 'none' : 'block');
+            miembrosGira.forEach(m => m.style.display = hacerMovimiento ? 'block' : 'none');
         }
 
         function ejecutarSaltoAvatar() {
@@ -314,10 +315,20 @@
         }
 
         function cambiarBoca(tipoBoca) {
-            Object.values(bocas).forEach(boca => {
-                if(boca) boca.style.display = 'none';
+            // Buscamos las bocas de manera global en el documento SVG para asegurar que siempre las encuentre
+            const bReposo = svgDoc.getElementById('boca-reposo');
+            const bA = svgDoc.getElementById('boca-A');
+            const bE = svgDoc.getElementById('boca-E');
+            const bO = svgDoc.getElementById('boca-O');
+
+            [bReposo, bA, bE, bO].forEach(b => {
+                if (b) b.style.display = 'none';
             });
-            if(bocas[tipoBoca]) bocas[tipoBoca].style.display = 'block';
+
+            if (tipoBoca === 'A' && bA) bA.style.display = 'block';
+            else if (tipoBoca === 'E' && bE) bE.style.display = 'block';
+            else if (tipoBoca === 'O' && bO) bO.style.display = 'block';
+            else if (bReposo) bReposo.style.display = 'block';
         }
 
         function iniciarConversacion() {
@@ -439,7 +450,7 @@
         function apagarModoContinuo() {
             limpiarTemporizadorSilencio();
             modoRepreguntaActivo = false;
-            try { reconocimiento.stop(); } catch(e){}
+            try { reconocimiento.stop();} catch(e){}
             if (audioActual) {
                 audioActual.pause();
                 audioActual = null;
@@ -454,27 +465,25 @@
             apagarModoContinuo();
         }
 
-        // 🔥 ANIMACIÓN SIMULTÁNEA DE BOCA Y CUERPO
         function iniciarAnimacionBoca() {
             if (intervaloHabla) return;
             const formasDeBoca = ['A', 'E', 'O', 'reposo'];
             
             intervaloHabla = setInterval(() => {
-                // Animación de boca aleatoria
+                // Cambia la boca fluidamente para simular el habla
                 const bocaAleatoria = formasDeBoca[Math.floor(Math.random() * formasDeBoca.length)];
                 cambiarBoca(bocaAleatoria);
 
-                // Alternancia de movimiento del cuerpo
-                alternarCuerpoAleatorio();
-            }, 130);
+                // Mueve los miembros de forma esporádica (no en cada ciclo rápido)
+                alternarMovimientoSuave();
+            }, 150);
         }
 
         function detenerAnimacionBoca() {
             clearInterval(intervaloHabla);
             intervaloHabla = null;
             cambiarBoca('reposo');
-            // Al detener el habla, restablecer todo el cuerpo a reposo
-            mostrarCuerpoReposo();
+            resetearMovimientoMiembros();
         }
     </script>
 </body>

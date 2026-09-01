@@ -95,7 +95,8 @@
 <body>
 
     <div id="pantalla-avatar">
-        <object id="avatar-svg" type="image/svg+xml" data="UCVsitoSVG.svg"></object>
+        <!-- 🔥 SVG actualizado al nuevo archivo con movimiento -->
+        <object id="avatar-svg" type="image/svg+xml" data="UCVsitoSVG_Mov.svg"></object>
     </div>
 
     <div id="status">Estado: Cargando a UCVsito...</div>
@@ -109,6 +110,11 @@
         const svgObject = document.getElementById('avatar-svg');
         let svgDoc = null;
         let bocas = {};
+        
+        // 🔥 CAPAS DEL AVATAR PARA EL EFECTO DE MOVIMIENTO
+        let capasReposo = [];
+        let capasMovimiento = [];
+
         let intervaloHabla = null;
         const statusText = document.getElementById('status');
         const btnHablar = document.getElementById('btn-hablar');
@@ -135,9 +141,6 @@
             reconocimiento.onresult = async (event) => {
                 limpiarTemporizadorSilencio();
                 
-                // 🔥 SOLUCIÓN CRÍTICA PARA IPHONE: Detener el reconocimiento inmediatamente aquí.
-                // Esto obliga a iOS a cerrar la sesión del micrófono liberando el hilo principal 
-                // para que la petición fetch no quede congelada.
                 try { reconocimiento.stop(); } catch(e){}
 
                 const textoDictado = event.results[0][0].transcript.trim();
@@ -187,12 +190,35 @@
 
         svgObject.addEventListener('load', () => {
             svgDoc = svgObject.contentDocument;
+            
+            // MAPEO DE BOCAS
             bocas = {
                 'reposo': svgDoc.getElementById('boca-reposo'),
                 'A': svgDoc.getElementById('boca-A'),
                 'E': svgDoc.getElementById('boca-E'),
                 'O': svgDoc.getElementById('boca-O')
             };
+
+            // 🔥 CAPTURAR CAPAS PARA EL MOVIMIENTO DEL CUERPO
+            capasReposo = [
+                svgDoc.getElementById('CABEZA'),
+                svgDoc.getElementById('BRAZO_DER'),
+                svgDoc.getElementById('BRAZO_IZQ'),
+                svgDoc.getElementById('PIERNA_DER'),
+                svgDoc.getElementById('PIERNA_IZQ')
+            ];
+
+            capasMovimiento = [
+                svgDoc.getElementById('CABEZA_GIRA'),
+                svgDoc.getElementById('BRAZO_DER_GIRA'),
+                svgDoc.getElementById('BRAZO_IZQ_GIRA'),
+                svgDoc.getElementById('PIERNA_DER_GIRA'),
+                svgDoc.getElementById('PIERNA_IZQ_GIRA')
+            ];
+
+            // Estado inicial del cuerpo: reposo visible, movimiento oculto
+            mostrarCuerpoReposo();
+
             inyectarAnimacionesNaturales(svgDoc);
             statusText.innerText = "Estado: En reposo";
             
@@ -218,6 +244,24 @@
             svgDoc.documentElement.addEventListener('click', ejecutarSaltoAvatar);
             svgDoc.documentElement.addEventListener('touchstart', ejecutarSaltoAvatar);
         });
+
+        // 🔥 FUNCIONES DE CONTROL DE CAPAS DEL CUERPO
+        function mostrarCuerpoReposo() {
+            capasReposo.forEach(capa => { if (capa) capa.style.display = 'block'; });
+            capasMovimiento.forEach(capa => { if (capa) capa.style.display = 'none'; });
+        }
+
+        function alternarCuerpoAleatorio() {
+            // Se define de forma aleatoria si muestra la pose de reposo o de giro
+            const esMovimiento = Math.random() > 0.4;
+            
+            capasReposo.forEach(capa => { 
+                if (capa) capa.style.display = esMovimiento ? 'none' : 'block'; 
+            });
+            capasMovimiento.forEach(capa => { 
+                if (capa) capa.style.display = esMovimiento ? 'block' : 'none'; 
+            });
+        }
 
         function ejecutarSaltoAvatar() {
             const avatar = document.getElementById('avatar-svg');
@@ -338,8 +382,6 @@
                 audioActual = null;
 
                 if (modoRepreguntaActivo) {
-                    // 🔥 AJUSTE PARA IPHONE: Damos 600ms de holgura para asegurar de que 
-                    // el hardware de audio del iPhone cambió de modo salida a modo entrada limpia.
                     setTimeout(() => {
                         activarMicrofono(); 
                     }, 600);
@@ -354,8 +396,6 @@
                 apagarModoContinuo();
             };
 
-            // 🔥 MEJORADO PARA IPHONE: iOS bloquea audios asíncronos si el usuario no interactúa.
-            // Al forzar una ejecución con promesa capturada prevenimos congelamientos en Safari.
             const playPromise = audioActual.play();
             if (playPromise !== undefined) {
                 playPromise.catch(error => {
@@ -414,12 +454,18 @@
             apagarModoContinuo();
         }
 
+        // 🔥 ANIMACIÓN SIMULTÁNEA DE BOCA Y CUERPO
         function iniciarAnimacionBoca() {
             if (intervaloHabla) return;
             const formasDeBoca = ['A', 'E', 'O', 'reposo'];
+            
             intervaloHabla = setInterval(() => {
+                // Animación de boca aleatoria
                 const bocaAleatoria = formasDeBoca[Math.floor(Math.random() * formasDeBoca.length)];
                 cambiarBoca(bocaAleatoria);
+
+                // Alternancia de movimiento del cuerpo
+                alternarCuerpoAleatorio();
             }, 130);
         }
 
@@ -427,6 +473,8 @@
             clearInterval(intervaloHabla);
             intervaloHabla = null;
             cambiarBoca('reposo');
+            // Al detener el habla, restablecer todo el cuerpo a reposo
+            mostrarCuerpoReposo();
         }
     </script>
 </body>

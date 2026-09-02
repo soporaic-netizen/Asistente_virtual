@@ -250,7 +250,7 @@
         function alternarMovimientoSuave() {
             if (miembrosGira.length === 0) return;
             
-            const hacerMovimiento = Math.random() < 0.25; 
+            const hacerMovimiento = Math.random() < 0.10; 
 
             // Alternar miembros
             miembrosReposo.forEach(m => m.style.display = hacerMovimiento ? 'none' : 'block');

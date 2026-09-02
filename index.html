@@ -108,10 +108,12 @@
     <script>
         const svgObject = document.getElementById('avatar-svg');
         let svgDoc = null;
-        let bocas = {};
         
         let miembrosReposo = [];
         let miembrosGira = [];
+        let cabezaReposo = null;
+        let cabezaGira = null;
+        let bocaActualGlobal = 'reposo';
 
         let intervaloHabla = null;
         const statusText = document.getElementById('status');
@@ -191,14 +193,9 @@
                 console.error("No se pudo acceder al documento interno del SVG.");
                 return;
             }
-            
-            // 🔥 Referencias seguras de la boca (buscadas tanto globalmente como dentro de la cabeza)
-            bocas = {
-                'reposo': svgDoc.getElementById('boca-reposo'),
-                'A': svgDoc.getElementById('boca-A'),
-                'E': svgDoc.getElementById('boca-E'),
-                'O': svgDoc.getElementById('boca-O')
-            };
+
+            cabezaReposo = svgDoc.getElementById('CABEZA');
+            cabezaGira = svgDoc.getElementById('CABEZA_GIRA');
 
             // Referencias de los miembros para movimiento independiente
             miembrosReposo = [
@@ -214,12 +211,6 @@
                 svgDoc.getElementById('PIERNA_DER_GIRA'),
                 svgDoc.getElementById('PIERNA_IZQ_GIRA')
             ].filter(Boolean);
-
-            // Mantener la cabeza fija de reposo siempre visible para no perder ojos ni cejas
-            const cabezaReposo = svgDoc.getElementById('CABEZA');
-            const cabezaGira = svgDoc.getElementById('CABEZA_GIRA');
-            if (cabezaReposo) cabezaReposo.style.display = 'block';
-            if (cabezaGira) cabezaGira.style.display = 'none';
 
             resetearMovimientoMiembros();
             cambiarBoca('reposo');
@@ -252,16 +243,27 @@
         function resetearMovimientoMiembros() {
             miembrosReposo.forEach(m => m.style.display = 'block');
             miembrosGira.forEach(m => m.style.display = 'none');
+            if (cabezaReposo) cabezaReposo.style.display = 'block';
+            if (cabezaGira) cabezaGira.style.display = 'none';
         }
 
         function alternarMovimientoSuave() {
             if (miembrosGira.length === 0) return;
             
-            // Cambiar de pose solo de vez en cuando (probabilidad baja para que no se mueva en cada palabra)
             const hacerMovimiento = Math.random() < 0.25; 
-            
+
+            // Alternar miembros
             miembrosReposo.forEach(m => m.style.display = hacerMovimiento ? 'none' : 'block');
             miembrosGira.forEach(m => m.style.display = hacerMovimiento ? 'block' : 'none');
+
+            // Alternar cabeza si existen ambas capas
+            if (cabezaReposo && cabezaGira) {
+                cabezaReposo.style.display = hacerMovimiento ? 'none' : 'block';
+                cabezaGira.style.display = hacerMovimiento ? 'block' : 'none';
+            }
+
+            // Aplicar la boca actual a la capa activa
+            cambiarBoca(bocaActualGlobal);
         }
 
         function ejecutarSaltoAvatar() {
@@ -283,7 +285,8 @@
                     0%, 90%, 100% { transform: scaleY(1); }
                     95% { transform: scaleY(0.0); }
                 }
-                #ojo-izq, #ojo-der {
+                /* 🔥 Ojos de Reposo y Movimiento (_G) */
+                #ojo-izq, #ojo-der, #ojo-izq_G, #ojo-der_G {
                     transform-box: fill-box; 
                     transform-origin: center center; 
                     animation: parpadear 4s infinite;
@@ -300,12 +303,13 @@
                     77% { transform: translateY(-2.0px) rotate(1.5deg); }
                     80% { transform: translateY(0px) rotate(0deg); }
                 }
-                #ceja-izq {
+                /* 🔥 Cejas de Reposo y Movimiento (_G) */
+                #ceja-izq, #ceja-izq_G {
                     transform-box: fill-box;
                     transform-origin: center center;
                     animation: moverCejaIzq 8s infinite ease-in-out;
                 }
-                #ceja-der {
+                #ceja-der, #ceja-der_G {
                     transform-box: fill-box;
                     transform-origin: center center;
                     animation: moverCejaDer 8s infinite ease-in-out;
@@ -315,20 +319,39 @@
         }
 
         function cambiarBoca(tipoBoca) {
-            // Buscamos las bocas de manera global en el documento SVG para asegurar que siempre las encuentre
+            bocaActualGlobal = tipoBoca;
+            
+            // Bocas en Reposo
             const bReposo = svgDoc.getElementById('boca-reposo');
             const bA = svgDoc.getElementById('boca-A');
             const bE = svgDoc.getElementById('boca-E');
             const bO = svgDoc.getElementById('boca-O');
 
-            [bReposo, bA, bE, bO].forEach(b => {
+            // 🔥 Bocas en Movimiento (_G)
+            const bReposo_G = svgDoc.getElementById('boca-reposo_G');
+            const bA_G = svgDoc.getElementById('boca-A_G');
+            const bE_G = svgDoc.getElementById('boca-E_G');
+            const bO_G = svgDoc.getElementById('boca-O_G');
+
+            // Ocultar todas las bocas (reposo y giro)
+            [bReposo, bA, bE, bO, bReposo_G, bA_G, bE_G, bO_G].forEach(b => {
                 if (b) b.style.display = 'none';
             });
 
-            if (tipoBoca === 'A' && bA) bA.style.display = 'block';
-            else if (tipoBoca === 'E' && bE) bE.style.display = 'block';
-            else if (tipoBoca === 'O' && bO) bO.style.display = 'block';
-            else if (bReposo) bReposo.style.display = 'block';
+            // Mostrar boca solicitada tanto en versión normal como versión _G
+            if (tipoBoca === 'A') {
+                if (bA) bA.style.display = 'block';
+                if (bA_G) bA_G.style.display = 'block';
+            } else if (tipoBoca === 'E') {
+                if (bE) bE.style.display = 'block';
+                if (bE_G) bE_G.style.display = 'block';
+            } else if (tipoBoca === 'O') {
+                if (bO) bO.style.display = 'block';
+                if (bO_G) bO_G.style.display = 'block';
+            } else {
+                if (bReposo) bReposo.style.display = 'block';
+                if (bReposo_G) bReposo_G.style.display = 'block';
+            }
         }
 
         function iniciarConversacion() {
@@ -470,11 +493,9 @@
             const formasDeBoca = ['A', 'E', 'O', 'reposo'];
             
             intervaloHabla = setInterval(() => {
-                // Cambia la boca fluidamente para simular el habla
                 const bocaAleatoria = formasDeBoca[Math.floor(Math.random() * formasDeBoca.length)];
                 cambiarBoca(bocaAleatoria);
 
-                // Mueve los miembros de forma esporádica (no en cada ciclo rápido)
                 alternarMovimientoSuave();
             }, 150);
         }

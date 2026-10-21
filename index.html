@@ -293,8 +293,8 @@
                 }
                 @keyframes moverCejaIzq {
                     0%, 71%, 100% { transform: translateY(0px) rotate(0deg); }
-                    73% { transform: translateY(-1.5px) rotate(-2deg); }
-                    75% { transform: translateY(-1.5px) rotate(-2deg); }
+                    73% { transform: translateY(-2px) rotate(-2deg); }
+                    75% { transform: translateY(-2px) rotate(-2deg); }
                     80% { transform: translateY(0px) rotate(0deg); }
                 }
                 @keyframes moverCejaDer {
@@ -441,8 +441,10 @@
         }
 
         async function despedirseYSalir() {
+           // 1. Detenemos cualquier reconocimiento de voz inmediatamente 
             try { reconocimiento.stop(); } catch(e){}
             limpiarTemporizadorSilencio();
+            // 🔥 CRÍTICO: Desactivamos la repregunta para que NO vuelva a escuchar al terminar el audio
             modoRepreguntaActivo = false; 
 
             statusText.innerText = "Estado: Despidiéndose...";
@@ -456,13 +458,51 @@
                     body: JSON.stringify({ pregunta: "Adiós" })
                 });
                 const data = await response.json();
-                reproducirVozYAnimar(data.respuesta, data.audio);
+                //reproducirVozYAnimar(data.respuesta, data.audio);
+                reproducirVozDespedida(data.respuesta, data.audio);
             } catch (error) {
                 console.warn("No se pudo obtener la despedida premium.");
                 apagarModoContinuo();
             }
         }
 
+        function reproducirVozDespedida(texto, audioBase64) {
+            if (!audioBase64) {
+                apagarModoContinuo();
+                return;
+            }
+            if (audioActual) audioActual.pause();
+
+            const audioUrl = `data:audio/mp3;base64,${audioBase64}`;
+            audioActual = new Audio(audioUrl);
+
+            audioActual.onplay = () => {
+                statusText.innerText = "Estado: UCVsito se está despidiendo...";
+                iniciarAnimacionBoca();
+            };
+
+            audioActual.onended = () => {
+                // 🔥 Cierre total de la sesión: detiene la animación y NO vuelve a encender el micrófono
+                detenerAnimacionBoca();
+                audioActual = null;
+                apagarModoContinuo();
+                statusText.innerText = "Estado: Sesión finalizada. En reposo.";
+            };
+
+            audioActual.onerror = (e) => {
+                console.error("Error en audio de despedida:", e);
+                apagarModoContinuo();
+            };
+
+            const playPromise = audioActual.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.warn("Error reproduciendo audio de despedida:", error);
+                    apagarModoContinuo();
+                });
+            }
+        }
+        
         function limpiarTemporizadorSilencio() {
             if (temporizadorSilencio) {
                 clearTimeout(temporizadorSilencio);
